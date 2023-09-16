@@ -207,3 +207,109 @@ plt.xlim([0,256])
 plt.show()
 ```
 
+## 3. 2D 直方图
+
+2D 直方图考虑的是图像的颜色（H），饱和度（S）。因此需要将颜色空间转换为 HSV 颜色空间。仍然使用`cv2.calcHist()`进行直方图绘制。
+
+此时两个通道的参数应组合为一个数组。注意 H 的范围。
+
+> 对应的，numpy 中的 2D 直方图绘制函数为`np.histogram2d()`
+
+- 绘制 2D 直方图：
+
+1. `cv2.imshow()`（不推荐）；
+2. `plt.imshow()`（推荐）；
+3. OpenCV（不推荐）；
+
+## 4. 直方图反向投影
+
+直方图反向投影常用于图像分割和寻找目标（特定）；直方图反向投影输出的图像与原图像大小相同，每一个像素值代表了输入图像对应点属于目标图像的概率，概率越大，像素点越白。
+
+1. 建立一张模板图像，使得目标物体尽量的占满图像；（尽量使用颜色直方图，颜色总会比灰度更好识别）
+2. 然后将颜色直方图投影到输入图像中进行计算；
+3. 得到概率图像，设置适当的阈值对其二值化。
+
+### Numpy 方法
+
+```python
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+
+img = cv2.imread('apple_tree.jpg')
+plate = cv2.imread('apple.jpg')
+
+hsv_img = cv2.cvtColor(img,cv2.COLOR_BGR2HSV)
+hsv_plate = cv2.cvtColor(plate,cv2.COLOR_BGR2HSV)
+
+hist_img = cv2.calcHist([hsv_img],[0,1],None,[180,256],[0,180,0,256])
+hist_plate = cv2.calcHist([hsv_plate],[0,1],None,[180,256],[0,180,0,256])
+
+# 计算 模板/输入 进行反向投影
+R = hist_plate/hist_img
+
+h,s,v = cv2.split(hsv_img)
+B = R[h.ravel(),s.ravel()]
+B = np.minimum(B,1)
+B = B.reshape(hsv_img.shape[:2])
+
+# 进行卷积
+disc = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(5,5))
+B = cv2.filter2D(B,-1,disc)
+B = np.uint8(B)
+cv2.normalize(B,B,0,255,cv2.NORM_MINMAX)
+
+ret,thresh = cv2.threshold(B,50,255,0)
+
+while True:
+    cv2.imshow('res',thresh)
+    key = cv2.waitKey(1)
+    if key == 27:
+        break
+
+cv2.destroyAllWindows()
+```
+
+### OpenCV 方法
+
+```python
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+
+img = cv2.imread('apple_tree.jpg')
+plate = cv2.imread('apple.jpg')
+
+hsv_img = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+hsv_plate = cv2.cvtColor(plate, cv2.COLOR_BGR2HSV)
+
+hist_plate = cv2.calcHist([hsv_plate], [0, 1], None, [
+                          180, 256], [0, 180, 0, 256])
+
+# 归一化直方图
+cv2.normalize(hist_plate, hist_plate, 0, 255, cv2.NORM_MINMAX)
+# 反向投影
+dst = cv2.calcBackProject([hsv_img], [0, 1], hist_plate, [0, 180, 0, 256], 1)
+
+# 卷积用来连接分散的点
+disc = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+dst = cv2.filter2D(dst, -1, disc)
+
+
+# 二值化概率图像
+ret, thresh = cv2.threshold(dst, 50, 255, 0)
+thresh = cv2.merge((thresh, thresh, thresh))
+
+# 按位操作进行掩膜计算
+res = cv2.bitwise_and(img, thresh)
+res = np.hstack((img, thresh, res))
+
+while True:
+    cv2.imshow('res', res)
+    key = cv2.waitKey(1)
+    if key == 27:
+        break
+
+cv2.destroyAllWindows()
+```
+
