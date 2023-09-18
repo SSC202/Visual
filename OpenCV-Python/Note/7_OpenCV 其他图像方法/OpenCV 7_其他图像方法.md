@@ -110,3 +110,164 @@ for meth in methods:
 
 ## 3. 霍夫变换（Hough）
 
+### 霍夫直线变换
+
+**笛卡尔空间和霍夫空间**
+
+1. 对于一个点的情况
+
+在笛卡尔坐标系中的一条直线$y = k_0x+b_0$对应霍夫空间的一点$(k_0,b_0)$。
+
+![NULL](picture_1.jpg)
+
+- **笛卡儿空间内的一条直线确定了霍夫空间内的一个点。**
+- **霍夫空间内的一个点确定了笛卡儿空间内的一条直线。**
+
+> - 笛卡儿空间内的点$(x_0,y_0)$映射到霍夫空间，就是直线$b=−x_0k+y_0$。
+> - 霍夫空间内的直线$b=−x_0k+y_0$映射到笛卡儿空间，就是点$(x_0,y_0)$。
+
+2. 对于两个点的情况
+
+- 笛卡儿空间内的两个点会映射为霍夫空间内两条相交于$(k_1,b_1)$的直线。
+- 这两个点对应的直线会映射为霍夫空间内的点$(k_1,b_1)$。
+
+**如果在笛卡儿空间内，有N个点能够连成一条直线$y=k_1x+b_1$，那么在霍夫空间内就会有N条直线穿过对应的点$(k_1,b_1)$。或者反过来说，如果在霍夫空间中，有越多的直线穿过点$(k_1,b_1)$，就说明在笛卡儿空间内有越多的点位于斜率为$k_1$，截距为$b_1$的直线$y=k_1x+b_1$上。**
+
+**霍夫变换选择直线的基本思路是：选择有尽可能多直线交汇的点。**
+
+**极坐标系与霍夫空间**
+
+直线的极坐标方程为$\rho = xcos\theta + ysin\theta$，与上述讨论类似，**选择由尽可能多条线汇成的点**。
+
+因此，我们使用累加器，当点对应的霍夫空间直线相交于一点时，累加器加一。设置阈值，当累加器超过一定值时，检测到直线。
+
+OpenCV 中的霍夫直线变换函数为`cv2.HoughLines()`
+
+```python
+"""
+	霍夫直线变换函数
+	第一个参数：二值化图像（应进行二值化或者Canny边缘检测）
+	第二个参数：距离的精确度
+	第三个参数：角度的精确度
+	第四个参数：累加器的阈值
+	返回值：元组（距离，角度）
+"""
+cv2.HoughLines()
+```
+
+```python
+cap = cv2.VideoCapture(1)
+cap.set(10, 2)
+
+while cap.isOpened() == True:
+    ret, frame = cap.read()
+    if ret == True:
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        binary = cv2.Canny(gray, 50, 150, apertureSize=3)
+
+        # 霍夫直线变换
+        lines = cv2.HoughLines(binary, 1, np.pi/180, 200)
+ 
+        if not lines is None != False: # 判断列表是空列表还是NoneType类型列表，避免无法遍历
+            for line in lines:
+                rho, theta = line[0]
+                a = np.cos(theta)
+                b = np.sin(theta)
+                x_0 = a*rho
+                y_0 = b*rho
+                x1 = int(x_0+1000*(-b))
+                y1 = int(y_0+1000*a)
+                x2 = int(x_0-1000*(-b))
+                y2 = int(y_0-1000*a)
+
+                cv2.line(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+
+        cv2.imshow('res', frame)
+        key = cv2.waitKey(1)
+        if key == 27:
+            break
+    else:
+        break
+
+cv2.destroyAllWindows()
+cap.release()
+```
+
+### 概率霍夫直线变换
+
+概率霍夫变换对基本霍夫变换算法进行了一些修正，是霍夫变换算法的优化。它没有考虑所有的点。相反，它只需要一个足以进行线检测的随机点子集即可。
+
+为了更好地判断直线，概率霍夫变换算法还对选取直线的方法作了两点改进：
+
+1. **所接受直线的最小长度。**如果有超过阈值个数的像素点构成了一条直线，但是这条直线很短，那么就不会接受该直线作为判断结果，而认为这条直线仅仅是图像中的若干个像素点恰好随机构成了一种算法上的直线关系而已，实际上原图中并不存在这条直线。
+2. **接受直线时允许的最大像素点间距。**如果有超过阈值个数的像素点构成了一条直线，但是这组像素点之间的距离都很远，就不会接受该直线作为判断结果，而认为这条直线仅仅是图像中的若干个像素点恰好随机构成了一种算法上的直线关系而已，实际上原始图像中并不存在这条直线。
+
+```python
+"""
+	概率霍夫直线变换函数
+	第一个参数：二值化图像（应进行二值化或者Canny边缘检测）
+	第二个参数：距离的精确度
+	第三个参数：角度的精确度
+	第四个参数：累加器的阈值
+	第五个参数：接受直线的最小长度
+	第六个参数：用来控制接受共线线段之间的最小间隔，即在一条线中两点的最大间隔。
+	返回值：元组（起终点坐标）
+"""
+cv2.HoughLinesP()
+```
+
+### 霍夫圆环变换
+
+用霍夫圆变换来检测图像中的圆，与使用霍夫直线变换检测直线的原理类似。在霍夫圆变换中，需要考虑圆半径和圆心（x坐标、y坐标）共3个参数。
+
+在OpenCV中，采用的策略是两轮筛选。第1轮筛选找出可能存在圆的位置（圆心）；第2轮再根据第1轮的结果筛选出半径大小。
+
+```python
+"""
+	霍夫圆环变换函数
+	第一个参数 image：灰度图。
+	第二个参数 method：检测方法。HOUGH_GRADIENT是唯一可用的参数值。
+	第三个参数 dp：累计器分辨率，它是一个分割比率，用来指定图像分辨率与圆心累加器分辨率的比例。例如，如果dp=1，则输入图像和累加器具有相同的分辨率。
+	第四个参数 minDist：圆心间的最小间距。
+	第五个参数 param1：Canny边缘检测器的高阈值（低阈值是高阈值的二分之一）。
+	第六个参数 param2：圆心位置必须收到的投票数。只有在第1轮筛选过程中，投票数超过该值的圆，才有资格进入第2轮的筛选。
+	第七个参数 minRadius：圆半径的最小值，小于该值的圆不会被检测出来。
+	第八个参数 maxRadius：圆半径的最大值，大于该值的圆不会被检测出来。
+	返回值：元组（圆心，半径）。
+"""
+cv2.HoughCircles()
+```
+
+```python
+import cv2
+import numpy as np
+
+cap = cv2.VideoCapture(1)
+cap.set(10, 2)
+
+while cap.isOpened() == True:
+    ret, frame = cap.read()
+    if ret == True:
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+        # 霍夫直线变换
+        circles = cv2.HoughCircles(
+            gray, cv2.HOUGH_GRADIENT, 1, 20, param1=50, param2=30, minRadius=50, maxRadius=60)
+
+        if not circles is None != False:  # 判断列表是空列表还是NoneType类型列表，避免无法遍历
+            circles = np.uint16(np.around(circles))
+            for i in circles[0, :]:
+                cv2.circle(frame, (i[0], i[1]), i[2], (0, 255, 0), 2)
+                cv2.circle(frame, (i[0], i[1]), 2, (0, 255, 0), 3)
+
+        cv2.imshow('res', frame)
+        key = cv2.waitKey(1)
+        if key == 27:
+            break
+    else:
+        break
+
+cv2.destroyAllWindows()
+cap.release()
+```
+
