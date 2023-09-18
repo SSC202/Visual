@@ -12,7 +12,7 @@ while cap.isOpened() == True:
 
         # 霍夫直线变换
         lines = cv2.HoughLines(binary, 1, np.pi/180, 200)
- 
+        
         if not lines is None != False: # 判断列表是空列表还是NoneType类型列表，避免无法遍历
             for line in lines:
                 rho, theta = line[0]
