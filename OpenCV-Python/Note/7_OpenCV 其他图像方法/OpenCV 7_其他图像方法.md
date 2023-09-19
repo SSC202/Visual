@@ -271,3 +271,110 @@ cv2.destroyAllWindows()
 cap.release()
 ```
 
+## 4. 分水岭图像分割
+
+任何一幅灰度图像都可以视为二维拓扑平面。灰度值高的区域为山峰（前景），灰度值低的区域为山谷（背景）。向每一个山谷中灌入不同颜色的水，随着水的升高，不同山谷的水会汇合，需要在水汇合的地方建立堤坝，实现对图像的分割。
+
+以上的方法通常会造成过度分割，是由于白噪声造成。为减少以上影响，OpenCV使用基于掩膜的分水岭算法，在这种算法中需要设置山谷点是否汇合。如果某个区域是肯定的前景（对象），使用标签值进行标记，如果肯定是背景使用另一个标签标记，不确定区使用0标记。
+
+当灌水时，标签被更新，当两个不同的标签的相遇时构建堤坝直到将山峰淹没。
+
+分水岭算法流程如下：
+
+> 1. 对源图像进行灰度化，使用OTSU进行二值化操作。
+> 2. 对二值化图像进行形态学开操作。(去除噪声)
+> 3. 利用`cv2.distanceTransform`完成图像距离变换操作。
+> 4. 将距离变换后的图像进行二值化，与原图像腐蚀后的图像进行比较，得到不确定区。
+> 5. 对二值化距离图像进行连通域分析`cv2.connectedComponents()`并进行标签标记。不确定区标记为0，确定区加1
+> 6. 分水岭算法进行分割
+
+```python
+import cv2
+import numpy as np
+
+img = cv2.imread('picture.jpg')
+gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+# 第一步：OTSU二值化
+res, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+# 第二步：图像进行开运算去除白噪声
+kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)
+# 第三步：图像距离变换
+dist_transform = cv2.distanceTransform(binary, cv2.DIST_L1, 5)
+# 二值化距离图像
+res, sure_fg = cv2.threshold(
+    dist_transform, 0.7 * (dist_transform.max()), 255, 0)
+# 第四步：图像腐蚀并寻找不确定区
+sure_bg = cv2.dilate(binary, kernel, iterations=3)
+sure_fg = np.uint8(sure_fg)
+unknown = cv2.subtract(sure_bg, sure_fg)
+# 第五步：标记
+ret, marker = cv2.connectedComponents(sure_fg)
+# 加一使得前景图像标志为1
+marker = marker + 1
+# 不确定区标记
+marker[unknown == 255] = 0
+# 深蓝色为未知区域，其余为浅蓝色标记
+# 第六步：分水岭算法，边界标记为-1
+markers = cv2.watershed(img, marker)
+img[markers == -1] = [255, 0, 0]
+
+cv2.imshow('res',img)
+cv2.waitKey()
+cv2.destroyAllWindows()
+```
+
+- 图像距离变换函数
+
+```python
+"""
+	计算一个二值图像中每个像素到最近零像素的距离
+	第一个参数：输入图像
+	第二个参数：指定距离类型
+		cv2.DIST_L1：使用L1范数计算距离（绝对值差和）。
+		cv2.DIST_L2：使用L2范数计算距离（欧几里得距离）。
+		cv2.DIST_C：使用Chessboard距离。
+		cv2.DIST_L12：使用L1-L2范数计算距离。
+	第三个参数：用于指定距离变换的掩膜大小。该参数仅对Chessboard距离有意义。
+	返回一个与输入图像大小相同的单通道图像，其中每个像素的值表示该像素到最近零像素的距离。
+"""
+cv2.distanceTransform()
+```
+
+- 连通域分析函数
+
+```python
+"""
+	用于标记二值图像中的连通区域并返回统计信息
+	第一个参数：输入的二值图像，可以是单通道或多通道图像。
+	第二个参数：指定连通性
+		4：4-邻域连通性（默认）。
+		8：8-邻域连通性。
+	第三个参数：输出标签的类型
+		cv2.CC_STAT_LEFT：返回每个连通区域的左边界坐标（x）。
+		cv2.CC_STAT_TOP：返回每个连通区域的顶边界坐标（y）。
+		cv2.CC_STAT_WIDTH：返回每个连通区域的宽度。
+		cv2.CC_STAT_HEIGHT：返回每个连通区域的高度。
+		cv2.CC_STAT_AREA：返回每个连通区域的像素面积。
+		cv2.CC_STAT_MAX：返回每个连通区域的最大像素值。
+		cv2.CC_STAT_MIN：返回每个连通区域的最小像素值。
+		cv2.CC_STAT_AVG：返回每个连通区域的平均像素值。
+		cv2.CC_STAT_SUM：返回每个连通区域的像素值总和。
+		cv2.CC_STAT_CENTROID：返回每个连通区域的质心坐标。
+	返回一个包含统计信息的数组，数组中的每个元素对应一个连通区域。数组的第一列是标签值，后续列是特定类型的统计信息。
+"""
+cv2.connectedComponents()
+```
+
+- 分水岭算法函数
+
+```python
+"""
+	执行图像分割算法，通常用于分割图像中的对象
+	第一个参数：输入图像，可以是灰度图像或彩色图像。
+	第二个参数：标记图像，用于指定要分割的对象的位置和数量。标记图像应该与输入图像具有相同的尺寸，并且标记应该是连续的整数。
+	返回一个与输入图像大小相同的二值图像，其中每个像素的值表示该像素所属的分割区域。分割区域的值为从1开始的连续整数。边界标记为-1。
+"""
+cv2.watershed()
+```
+
