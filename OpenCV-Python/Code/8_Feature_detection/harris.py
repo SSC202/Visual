@@ -33,7 +33,7 @@ while cap.isOpened() == True:
         criteria = (cv2.TERM_CRITERIA_EPS +
                     cv2.TERM_CRITERIA_MAX_ITER, 100, 0.01)
 
-        # 第六步：
+        # 第六步：角点检测（形态学变换后）
         corners = cv2.cornerSubPix(gray, np.float32(centroids),
                                    (5, 5), (-1, -1), criteria)
         result = np.hstack((centroids, corners))
