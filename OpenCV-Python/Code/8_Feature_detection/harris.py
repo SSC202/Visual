@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-cap = cv2.VideoCapture(1)
+cap = cv2.VideoCapture(0)
 cap.set(10, 2)
 
 while cap.isOpened() == True:
@@ -38,7 +38,8 @@ while cap.isOpened() == True:
                                    (5, 5), (-1, -1), criteria)
         result = np.hstack((centroids, corners))
         
-        result = np.int0(result)
+        result = np.intp(result)
+
         frame[result[:, 1], result[:, 0]] = [0, 0, 255]
         frame[result[:, 3], result[:, 2]] = [0, 255, 0]
 
