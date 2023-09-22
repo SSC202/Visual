@@ -1,4 +1,4 @@
-# OpenCV Python 8_图像特征检测
+# OpenCV Python 8_图像特征
 
 图像的特征必须要使得计算机可以识别（比如角点）。
 
@@ -416,5 +416,69 @@ while cap.isOpened() == True:
 cv2.destroyAllWindows()
 cap.release()
 
+```
+
+## 3. FAST 角点检测
+
+对于快速实时性而言，使用FAST角点检测效率更高。
+
+1. 选取一个像素点$p$，以像素$p$为中心画一个半径为3像素的圆，取圆上的16个点，如下图所示：
+
+   ![NULL](picture_5.jpg)
+
+2. 选取阈值$t$；
+
+3. 考察$p1,p5,p9,p13$（四个方向的中点）与中心$p$的像素差，若它们的绝对值有至少3个超过阈值$t$，则当做候选角点，再进行下一步考察；否则，不可能是角点。
+
+4. 在$p$是候选点的情况下，计算$p1$到$p16$这16个点与中心$p$的像素差， 若它们有至少连续9个超过阈值（也可以测试其他大小，实验表明9的效果更好），则是角点；否则，不是角点。一般情况下，n取12，所以这个标准定义为FAST-12，而实际上当n=9时，往往能取得较好的效果。
+
+5. 遍历整个图像；
+
+6. 对整个图片进行计算后，很可能大部分检测出来的点彼此之间相邻，要去除一部分这样的点。为了解决这一问题，采用**非极大值抑制的算法**，去除小区域内多个重复的特征点。
+
+   > - 计算特征点处的FAST得分值$V$（或者说响应值），**即16个点与中心差值的绝对值总和。**
+   > - 判断以特征点$p$为中心的一个邻域（可以设为3×3或着5×5）内，若有多个特征点，则判断每个特征点的响应值,如果$p$是其中最大的，则保留，否则，删除。如果只有一个特征点，就保留。
+
+FAST 角点检测有一定缺点：
+
+- 在首先的四点检测里，只有2个点同中心点不相似，也并不能说明这不是角点。
+- 前面的四点检测结果和后面的16点检测的计算有一定重复。
+- 检测出来的角点不一定是最优的，这是因为它的效率取决于问题的排序与角点的分布。
+
+```python
+"""
+	FAST 角点检测器创建函数
+	返回值：角点检测器
+"""
+cv2.FastFeatureDetector.create()
+```
+
+```python
+import cv2
+import numpy as np
+
+cap = cv2.VideoCapture(1)
+cap.set(10, 2)
+
+while cap.isOpened() == True:
+    ret, frame = cap.read()
+    if ret == True:
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+        # 生成 FAST 角点检测器
+        fast = cv2.FastFeatureDetector.create()
+        # FAST 角点检测
+        keypoints = fast.detect(gray, None)
+
+        frame = cv2.drawKeypoints(gray, keypoints, frame)
+        cv2.imshow('res',frame)
+        key = cv2.waitKey(1)
+        if key == 27:
+            break
+    else:
+        break
+    
+cv2.destroyAllWindows()
+cap.release()
 ```
 
