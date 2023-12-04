@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 
 # 读取视频文件
-cap = cv2.VideoCapture('test.mp4')
+cap = cv2.VideoCapture(1)
 
 # 读取第一帧
 ret, old_frame = cap.read()
@@ -31,8 +31,11 @@ while True:
         old_gray, frame_gray, p0, None, **lk_params)
 
     # 仅保留跟踪成功的点
-    good_new = p1[status == 1]
-    good_old = p0[status == 1]
+    if p1 is not None:
+        good_new = p1[status == 1]
+        good_old = p0[status == 1]
+    else:
+        pass
 
     # 绘制轨迹
     for i, (new, old) in enumerate(zip(good_new, good_old)):
