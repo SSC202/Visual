@@ -318,3 +318,102 @@ cap.release()
 cv2.destroyAllWindows()
 ```
 
+## 3. 背景减除
+
+**（摄像头静止时使用）**
+
+### BackgroundSubtractorMOG 算法
+
+以混合高斯模型为基础的前景/背景分割算法,使用 K（K = 3 或 5）个高斯分布混合对 背景像素进行建模。使用这些颜色（在整个视频中）存在时间的长短作为混合的权重。背景的颜色一般持续的时间最长，而且更加静止。
+```python
+"""
+	背景对象创建函数
+	history：时间长度，默认200
+	nmixtures：高斯混合成分的数量，默认5
+	backgroundRatio：背景比率，默认0.7
+	noiseSigma：噪声强度（亮度或每个颜色通道的标准偏差）。默认 0表示一些自动值。
+"""
+fgbg = cv2.bgsegm.createBackgroundSubtractorMOG(history, nmixtures, backgroundRatio, noiseSigma)
+```
+
+### BackgroundSubtractorMOG2 算法
+
+以高斯混合模型为基础的背景/前景分割算法，它为每 一个像素选择一个合适数目的高斯分布。这样就会对由于亮度等发生变化引起的场景变化产生更好的适应。
+```python
+"""
+	背景对象创建函数
+	history：时间长度，默认500
+	varThreshold：像素和模型之间的平方Mahalanobis距离的阈值，以确定背景模型是否很好地描述了像素。此参数不会影响后台更新。默认16
+	detectShadows：如果为true（默认），则算法将检测阴影并标记它们。它会略微降低速度，因此如果您不需要此功能，请将参数设置为false。
+"""
+fgbg = cv2.createBackgroundSubtractorMOG2(history, varThreshold, detectShadows)
+```
+
+```python
+import cv2
+
+# 创建背景减除器对象
+## bg_subtractor = cv2.createBackgroundSubtractorMOG2()
+bg_subtractor = cv2.bgsegm.createBackgroundSubtractorMOG()
+cap = cv2.VideoCapture(1)
+
+while True:
+    # 读取当前帧
+    ret, frame = cap.read()
+
+    if not ret:
+        break
+
+    # 对当前帧应用背景减除算法
+    fg_mask = bg_subtractor.apply(frame)
+
+    # 可以对结果进行一些后处理，比如去除小的噪点
+    fg_mask = cv2.medianBlur(fg_mask, 5)
+
+    cv2.imshow('Original Frame', frame)
+    cv2.imshow('Foreground Mask', fg_mask)
+
+    if cv2.waitKey(30) & 0xFF == ord('q'):
+        break
+
+cap.release()
+cv2.destroyAllWindows()
+```
+
+### BackgroundSubtractorGMG算法
+
+结合了静态背景图像估计和每个像素的贝叶斯分割。它使用前面很少的图像（默认为前 120 帧）进行背景建模。使用了概率前景估计算法（使用贝叶斯估计鉴定前景）。这是一种自适应的估计，新观察到的对象比旧的对象具有更高的权重，从而对光照变化产生适应。一些形态学操作 如开运算闭运算等被用来除去不需要的噪音。在前几帧图像中会得到一个黑色窗口。
+
+对结果进行形态学开运算对与去除噪声很有帮助。
+
+```python
+"""
+	背景对象创建函数
+	initializationFrames：于初始化背景模型的帧数，默认120
+	decisionThreshold：阈值，超过该阈值，标记为前景，否则为背景，默认0.8
+"""
+fgbg = cv2.bgsegm.createBackgroundSubtractorGMG(initializationFrames，decisionThreshold)
+```
+
+```python
+import numpy as np
+import cv2
+
+cap = cv2.VideoCapture(1)
+kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+fgbg = cv2.bgsegm.createBackgroundSubtractorGMG()
+while True:
+    ret, frame = cap.read()
+    fgmask = fgbg.apply(frame)
+    fgmask = cv2.morphologyEx(fgmask, cv2.MORPH_OPEN, kernel)
+    cv2.imshow('frame', fgmask)
+    cv2.imshow('original', frame)
+    k = cv2.waitKey(30) & 0xff
+    if k == 27:
+        break
+cap.release()
+cv2.destroyAllWindows()
+```
+
+
+
