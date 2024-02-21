@@ -8,7 +8,8 @@
 2. 下载 OpenCV Python 包
 
 ```shell
-pip install opencv-contrib-python
+pip install opencv-python			# opencv-python 的基础功能包
+pip install opencv-contrib-python	 # opencv-python 的基础和扩展功能包，如果上一行无法使用则使用此行
 ```
 
 3. 在 VSCode 中按 F1 选择合适的解释器
