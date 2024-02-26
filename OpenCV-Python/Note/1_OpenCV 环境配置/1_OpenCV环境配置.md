@@ -1,5 +1,19 @@
 # OpenCV Python 1_环境配置
 
+[OpenCV - Open Computer Vision Library](https://opencv.org/)
+
+## 0. OpenCV 简介
+
+OpenCV（Open Source Computer Vision Library）是一个开源的计算机视觉库。
+
+OpenCV 使用 C/C++ 开发，同时也提供了 Python、Java、MATLAB 等其他语言的接口。
+
+OpenCV 是跨平台的，可以在 Windows、Linux、Mac OS、Android、iOS 等操作系统上运行。
+
+OpenCV 的应用领域非常广泛，包括图像拼接、图像降噪、产品质检、人机交互、人脸识别、动作识别、动作跟踪、无人驾驶等。
+
+OpenCV 还提供了机器学习模块，你可以使用正态贝叶斯、K最近邻、支持向量机、决策树、随机森林、人工神经网络等机器学习算法。
+
 ## 1. Python 环境配置
 
 （推荐使用Anaconda创建虚拟环境）
