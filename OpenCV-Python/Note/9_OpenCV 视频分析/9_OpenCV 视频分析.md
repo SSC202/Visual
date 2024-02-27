@@ -415,5 +415,143 @@ cap.release()
 cv2.destroyAllWindows()
 ```
 
+## 4. Kalman Filter 跟踪方法
 
+- 原理
+
+Kalman Filter 预测过程：
+$$
+\hat{\bold{x_{k}^{-}}} = \bold{A}\hat{\bold{x_{k-1}}}+\bold{Bu}_{k-1} \\
+\bold{P_k^-} =\bold{ AP_{k-1}A^T + Q}
+$$
+Kalman Filter 更新过程：
+$$
+\bold{K_k} = \frac{\bold{P_k^- H^T}}{\bold{HP_k^- H^T + R}} \\
+\bold{\hat{x_k}} = \hat{\bold{x_{k}^{-}}} + \bold{K_k}(\bold{z_k} - \bold{H}\hat{\bold{x_{k}^{-}}}) \\
+\bold{P_k} = (\bold{I} - \bold{K_k H})\bold{P_k^-}
+$$
+在图像中，选取$x,y,\dot{x},\dot{y}$作为状态变量，离散化的状态空间表达式如下：
+$$
+\left[\begin{matrix}
+x_n \\
+y_n \\
+\dot{x_n} \\
+\dot{y_n}
+\end{matrix}\right] = 
+\left[\begin{matrix}
+1 & 0 & 1 & 0 \\
+0 & 1 & 0 & 1 \\
+0 & 0 & 1 & 0 \\
+0 & 0 & 0 & 1 \\
+\end{matrix}\right] 
+\left[\begin{matrix}
+x_{n-1} \\
+y_{n-1} \\
+\dot{x_{n-1}} \\
+\dot{y_{n-1}}
+\end{matrix}\right] + 
+\left[\begin{matrix}
+v_x \\
+v_y \\
+v_{\dot{x}} \\
+v_{\dot{y}} 
+\end{matrix}\right]
+$$
+
+- 代码
+
+```python
+"""
+	Kalman Filter 对象创建函数
+	第一个参数：状态向量的维度
+	第二个参数：测量（输出）向量的维度
+	第三个参数：控制向量的维度，默认为0表示没有控制
+	返回值：Kalman Filter 对象
+"""
+cv2.KalmanFilter()
+
+"""
+	成员函数
+"""
+kalman.correct(measurement)		# 根据测量更新预测的状态（预测过程）
+kalman.predict(control=Mat()) 	# 计算预测状态（更新过程）
+
+"""
+	成员变量
+"""
+kalman.transitionMatrix			# 状态转移矩阵（A）。
+kalman.controlMatrix			# 控制矩阵（B）（如果没有控制则不使用）。
+kalman.measurementMatrix 		# 测量矩阵（H）。
+kalman.processNoiseCov 			# 过程噪声协方差矩阵（Q）。
+kalman.measurementNoiseCov		# 测量噪声协方差矩阵（R）。
+kalman.statePre					# 预测状态（先验估计值x’）。
+kalman.statePost				# 校正后的状态（后验估计值x）。
+kalman.errorCovPre				# 先验误差估计协方差矩阵（P’）。
+kalman.errorCovPost				# 后验误差估计协方差矩阵（P）。
+kalman.gain						# 卡尔曼增益矩阵（K）。
+```
+
+```python
+"""
+	使用 Kalman Filter 跟踪鼠标轨迹
+"""
+import cv2
+import numpy as np
+
+frame = np.zeros((800, 800, 3), np.uint8)
+
+last_measurement = current_measurement = np.array((2, 1), np.float32)	# 测量(x,y)初始化
+last_predicition = current_prediction = np.zeros((2, 1), np.float32) 	# 预测(x,y)初始化
+
+"""
+    传递X,Y的坐标值,便于对轨迹进行卡尔曼滤波
+"""
+
+
+def mousemove(event, x, y, s, p):
+    global frame, current_measurement, measurements, last_measurement, current_prediction, last_prediction
+    # 更新测量值和预测值
+    last_measurement = current_measurement
+    last_prediction = current_prediction
+    # 传递当前测量坐标值
+    current_measurement = np.array([[np.float32(x)], [np.float32(y)]])
+    # 预测得到先验结果
+    kalman.correct(current_measurement)
+    # 更新得到后验结果
+    current_prediction = kalman.predict()
+    # 上一次测量值
+    lmx, lmy = last_measurement[0], last_measurement[1]
+    # 当前测量值
+    cmx, cmy = current_measurement[0], current_measurement[1]
+    # 上一次预测值
+    lpx, lpy = last_prediction[0], last_prediction[1]
+    # 当前预测值
+    cpx, cpy = current_prediction[0], current_prediction[1]
+
+    cv2.line(frame, (int(lmx), int(lmy)), (int(cmx), int(cmy)), (0, 100, 0))
+    cv2.line(frame, (int(lpx), int(lpy)), (int(cpx), int(cpy)), (0, 0, 200))
+
+
+cv2.namedWindow("kalman_tracker")
+
+cv2.setMouseCallback("kalman_tracker", mousemove)
+
+kalman = cv2.KalmanFilter(4, 2)
+kalman.measurementMatrix = np.array([[1, 0, 0, 0], [0, 1, 0, 0]], np.float32)
+kalman.transitionMatrix = np.array(
+    [[1, 0, 1, 0], [0, 1, 0, 1], [0, 0, 1, 0], [0, 0, 0, 1]], np.float32
+)
+kalman.processNoiseCov = (
+    np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]], np.float32)
+    * 0.03
+)
+
+while True:
+    cv2.imshow("kalman_tracker", frame)
+    if (cv2.waitKey(30) & 0xFF) == 27:
+        break
+
+cv2.destroyAllWindows()
+
+```
 
