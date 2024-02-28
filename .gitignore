@@ -1,1 +1,4 @@
 *.mp4
+*.ini
+
+/Yolov5/Code/yolov5
