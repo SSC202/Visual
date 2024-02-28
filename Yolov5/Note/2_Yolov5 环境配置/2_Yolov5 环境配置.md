@@ -24,3 +24,22 @@ cuDNN是NVIDIACUDA®深度神经网络库，是GPU加速的用于深度神经网
 $ git clone https://github.com/ultralytics/yolov5
 ```
 
+### 预训练模型下载
+
+![NULL](./assets/picture_1.jpg)
+
+为了缩短网络的训练时间，并达到更好的精度，一般加载预训练权重进行网络的训练。yolov5提供了以上几个预训练权重，可以对应不同的需求选择不同的版本的预训练权重。在实际场景中是比较看重速度，所以`YOLOv5s`是比较常用的。
+
+### 安装依赖
+
+在yolov5路径下执行：
+
+```shell
+$ pip install -r requirements.txt 
+```
+
+### 检查安装
+
+在yolov5路径下运行`detect.py`文件，若正常运行则说明yolov5安装成功，运行结果可以`runs\`文件夹下看到。
+
+![NULL](./assets/picture_2.jpg)
