@@ -1,3 +1,7 @@
+"""
+    圆形检测相关函数
+"""
+
 import numpy as np
 from scipy.linalg import pinv
 from typing import List, Tuple
@@ -384,7 +388,7 @@ def estimate_closed_center_radius(A1B1C1):
     return estimateR, estimateO
 
 
-def pinv_eigen_based(origin, er=1e-6):
+def pinv_eigen_based(origin, er=1e-8):
     """
     基于SVD计算矩阵的伪逆
     """
@@ -617,7 +621,7 @@ def circle_estimate_grouped_arcs(
         # Fit
         result = circle_verify(X, Y, len(X), stEdMid, groupedO, groupedR)
         if not isinstance(result, tuple):
-            print(f"Unexpected result type from circle_verify: {result}")
+            # print(f"Unexpected result type from circle_verify: {result}")
             continue
         success, inlierRatio, spanAngle = result
 
@@ -687,12 +691,45 @@ def cluster_circles(total_circles):
             sim_circles.sort(key=lambda x: x.inlierRatio, reverse=True)
 
         rep_circles.append(sim_circles[0] if sim_circles else circle1)
-        print(
-            "Final inlier ratio:",
-            sim_circles[0].inlierRatio if sim_circles else circle1.inlierRatio,
-        )
+        # print(
+        #     "Final inlier ratio:",
+        #     sim_circles[0].inlierRatio if sim_circles else circle1.inlierRatio,
+        # )
 
     return rep_circles
 
+def uneven_check_circles(circles, binary_image, threshold_ratio):
+    # 存储满足要求的圆的列表
+    satisfying_circles = []
 
+    # 遍历每个圆
+    for circle in circles:
+        # 获取圆的中心坐标和半径
+        x, y, r = int(circle.xc), int(circle.yc), int(circle.r)
 
+        if r < 20:
+            continue
+
+        # 创建一个与原始图像大小相同的全零数组
+        mask = np.zeros_like(binary_image)
+
+        # 创建一个圆形掩码
+        cv2.circle(mask, (x, y), r, 255, thickness=-1)
+
+        # 使用位与操作获取圆形区域
+        circle_mask = cv2.bitwise_and(binary_image, mask)
+
+        # 计算圆形区域内白色像素的数量
+        white_pixel_count = cv2.countNonZero(circle_mask)
+
+        # 计算圆形区域的总像素数量
+        total_pixel_count = np.sum(mask == 255)
+
+        # 计算白色像素的比例
+        white_pixel_ratio = white_pixel_count / total_pixel_count
+
+        # 判断白色像素的比例是否满足阈值要求
+        if white_pixel_ratio >= threshold_ratio:
+            satisfying_circles.append(circle)
+
+    return satisfying_circles

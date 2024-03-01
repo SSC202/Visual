@@ -1,11 +1,14 @@
-import numpy as np
+"""
+    RDP算法函数
+"""
 
-"""
-    计算点到直线的距离
-"""
+import numpy as np
 
 
 def perpendicular_distance(pt, line_start, line_end):
+    """
+    计算点到直线的距离
+    """
     dx = line_end[0] - line_start[0]
     dy = line_end[1] - line_start[1]
     # 归一化
@@ -22,12 +25,11 @@ def perpendicular_distance(pt, line_start, line_end):
     ay = pvy - dsy
     return np.sqrt(ax**2 + ay**2)
 
-"""
-    RDP算法
-"""
-
 
 def ramer_douglas_peucker(point_list, epsilon, out):
+    """
+    RDP算法
+    """
     if len(point_list) < 2:
         raise ValueError("Not enough points to simplify")
     dmax = 0.0

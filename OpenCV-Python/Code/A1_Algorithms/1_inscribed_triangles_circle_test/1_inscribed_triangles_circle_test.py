@@ -26,17 +26,17 @@ cap.set(10, 2)
 # 5. 边缘检测定义
 ed = cv2.ximgproc.createEdgeDrawing()  # 创建ED对象
 # 6. 圆检测器定义
-sharp_angle = 40
+sharp_angle = 25
 T_l = 20
 T_ratio = 0.001
 T_o = 5
 # 5 10 15 20 25
 T_r = 5
 # 5 10 15 20 25
-T_inlier = 0.3
+T_inlier = 0.21
 # 0.3 0.35 0.4 0.45 0.5 (the larger the more strict)
 T_angle = 2.0
-T_inlier_closed = 0.5
+T_inlier_closed = 0.2
 
 while cap.isOpened() == True:
     ret, frame = cap.read()
@@ -195,12 +195,21 @@ while cap.isOpened() == True:
             red_totalCircles.extend(red_grouped_circles)
         if red_closed_circles:
             red_totalCircles.extend(red_closed_circles)
-        preCircles = CircleTool.cluster_circles(red_totalCircles)
+        red_preCircles = CircleTool.cluster_circles(red_totalCircles)
+        # 15. 凹凸处理
+        # 二值化
+        _, red_binary = cv2.threshold(red_gray, 0, 255, cv2.THRESH_BINARY)
+        red_sati_circles = CircleTool.uneven_check_circles(
+            red_preCircles, red_binary, 0.15
+        )
 
         # 检测
-        for circle in preCircles:
+        for circle in red_sati_circles:
             xc, yc, r = int(circle.xc), int(circle.yc), int(circle.r)
             cv2.circle(frame, (xc, yc), r, (0, 255, 0), 2)
+        print(red_sati_circles)
+        # # print(red_sati_circles)
+        # cv2.imshow("binary", red_binary)
         cv2.imshow("res", frame)
         key = cv2.waitKey(1)
         if key == 27:

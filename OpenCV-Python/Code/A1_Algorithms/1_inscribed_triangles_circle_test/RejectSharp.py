@@ -1,3 +1,7 @@
+"""
+    锐角拒绝相关函数
+"""
+
 import numpy as np
 
 
@@ -7,12 +11,10 @@ class SharpTurn:
         self.new_segList = []
 
 
-"""
-    拒绝锐角算法
-"""
-
-
 def reject_sharp_turn(edgeList, segList, angle):
+    """
+    拒绝锐角算法
+    """
     result = SharpTurn()
     no_seg_grps = len(segList)
     break_points = []
@@ -79,7 +81,10 @@ def reject_sharp_turn(edgeList, segList, angle):
                     last_seg_index = break_points[index][1]
 
                     for jj in range(first_edge_index, len(current_edge)):
-                        if current_seg[last_seg_index][0] == current_edge[jj][0] and current_seg[last_seg_index][1] == current_edge[jj][1]:
+                        if (
+                            current_seg[last_seg_index][0] == current_edge[jj][0]
+                            and current_seg[last_seg_index][1] == current_edge[jj][1]
+                        ):
                             last_edge_index = jj
                             break
 
