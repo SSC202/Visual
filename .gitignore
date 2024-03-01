@@ -1,5 +1,8 @@
 *.mp4
 *.ini
+*.exe
 *.pyc
 
+
 /Yolov5/Code/yolov5
+.vscode
