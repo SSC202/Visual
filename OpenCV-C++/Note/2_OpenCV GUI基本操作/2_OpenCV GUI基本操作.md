@@ -232,78 +232,6 @@ VideoWriter :: VideoWriter(const String& filename,
 | `CV_ROURCC('I','2','6','3')` | `H263I`编码    |
 | `CV_ROURCC('F','L','V','1')` | `FLV1`编码     |
 
-```c++
-#include<iostream>
-#include<opencv2/opencv.hpp>
-
-using namespace std;
-using namespace cv;
-
-int main()
-{
-//视频加载
-	VideoCapture video = VideoCapture("Project.mp4");
-
-	if (video.isOpened())
-	{
-		cout << "Width = " << video.get(CAP_PROP_FRAME_WIDTH);
-		cout << "Height = " << video.get(CAP_PROP_FRAME_HEIGHT);
-		cout << "FPS = " << video.get(CAP_PROP_FPS);
-	}
-	else
-	{
-		cout << "Failed!" << endl;
-		return -1;
-	}
-//视频以帧格式保存在mat对象之中
-	Mat mat;
-
-	video >> mat;
-		
-	if (mat.empty())
-	{
-		cout << "No image!" << endl;
-	}
-
-//视频流创建和配置
-	bool isColor = (mat.type() == CV_8UC3);
-	VideoWriter writer;
-	int coder = VideoWriter::fourcc('M', 'J', 'P', 'G');
-
-	double fps = 50.0;
-	string filename = "product.avi";
-	writer.open(filename, coder, fps, mat.size(), isColor);
-	if (!writer.isOpened())
-	{
-		cout << "ERROR!" << endl;
-		return -1;
-	}
-//将读取的视频帧写入视频流中并保存
-
-	while (1)
-	{
-		if (!video.read(mat))
-		{
-			cout << "读取完毕" << endl;
-			break;
-		}
-		writer.write(mat);
-		imshow("product", mat);
-
-		char c = waitKey(50);
-		if (c == 27)
-		{
-			break;
-		}
-	}
-//释放对象
-	video.release();
-	writer.release();
-	return 0;
-
-}
-```
-
 ## 3. `XML`和`YMAL`文件的读取和保存
 
 `XML`是一种元标记语言，所谓元标记就是使用者可以根据自身需求定义自己的标记，`XML`是一种结构化的语言，通过`XML`语言可以知道数据之间的隶属关系。通过标记的方式，无论以任何形式保存数据，只要文件满足`XML`格式，那么读取出来的数据就不会出现混淆和歧义。`XML`文件的扩展名是`.xml`。
@@ -365,91 +293,216 @@ void cv::FileStorage::write(const String & name,int  val);
 
 >另外一种方法可以不使用迭代器，通过在变量后边添加`[]`地址的形式读取数据，例如`FileNode[0]`表示数组变量中的第一个数据，`FileNode[“Xiaoming”]`表示`“age”`变量中的`“Xiaoming”`变量的数据，依次向后添加`[]`地址实现多节点数据的读取。
 
+## 4. 绘图函数
+
+绘图统一参数：
+
+> 1. `img`：绘图用的图像
+> 2. `color`：绘图的颜色，RGB图为一个元组，灰度图给出灰度值。
+> 3. `thickness`：绘图的粗细，默认为1，如果为-1则为闭合填充。
+> 4. `linetype`：线条类型，默认为8连接，`cv2.LINE_AA`为抗锯齿，图像会比较平滑。
+
+- 线条函数
+
 ```c++
-#include<iostream>
-#include<vector>
-#include<string>
-//#include <stdio.h>
+/**
+  * @brief	线条绘制函数
+  * @param  img			图像
+  * @param  pt1			左上角点(Point(x,y))
+  * @param	pt2			右下角点(Point(x,y))
+  */
+void line(InputOutputArray img, Point pt1, Point pt2, const Scalar& color,
+                     int thickness = 1, int lineType = LINE_8, int shift = 0);
+```
+
+- 矩形函数
+
+```c++
+/**
+  * @brief	矩形绘制函数
+  * @param  img			图像
+  * @param  pt1			左上角点(Point(x,y))
+  * @param	pt2			右下角点(Point(x,y))
+  */
+void rectangle(InputOutputArray img, Point pt1, Point pt2,const Scalar& color, int thickness = 1,int lineType = LINE_8, int shift = 0);
+```
+
+- 圆形函数
+
+```c++
+/**
+  * @brief	圆形绘制函数
+  * @param  img			图像
+  * @param  center		圆心坐标
+  * @param	radius		半径
+  */
+void circle(InputOutputArray img, Point center, int radius,const Scalar& color, int thickness = 1,int lineType = LINE_8, int shift = 0);
+```
+
+- 椭圆函数
+
+```c++
+/**
+  * @brief	椭圆绘制函数
+  * @param  img			图像
+  * @param  center		中心点坐标
+  * @param	axes		两个轴的长度
+  * @param	angle		椭圆沿逆时针旋转的角度
+  * @param	startAngle	 椭圆弧的起始角度
+  * @param	endAngle	椭圆弧的结束角度
+  */
+void ellipse(InputOutputArray img, Point center, Size axes,double angle, double startAngle, double endAngle,const Scalar& color, int thickness = 1,int lineType = LINE_8, int shift = 0);
+```
+
+- 多边形
+
+对于多边形，需要指定每个顶点的坐标来构建一个数组。
+
+```c++
+/**
+  * @brief	多边形绘制函数
+  * @param  img			图像
+  * @param  pts			点集
+  * @param	isClosed	布尔值
+  */
+void polylines(InputOutputArray img, InputArrayOfArrays pts,bool isClosed, const Scalar& color,int thickness = 1, int lineType = LINE_8, int shift = 0 );
+```
+
+- 写文字
+
+```c++
+/**
+  * @brief	文字绘制函数
+  * @param  img			图像
+  * @param  text		文字
+  * @param  org		 	绘制位置
+  * @param	fontFace	字体
+  * @param  fontScale	字体大小
+  */
+void putText( InputOutputArray img, const String& text, Point org,int fontFace, double fontScale, Scalar color,int thickness = 1, int lineType = LINE_8,bool bottomLeftOrigin = false );
+```
+
+## 5. 鼠标事件
+
+鼠标事件可以是鼠标上发生的任何动作，可以通过各种鼠标事件执行不同的任务。
+
+```c++
+EVENT_MOUSEMOVE              //滑动
+EVENT_LBUTTONDOWN            //左键点击
+EVENT_RBUTTONDOWN            //右键点击
+EVENT_MBUTTONDOWN            //中键点击
+EVENT_LBUTTONUP              //左键放开
+EVENT_RBUTTONUP              //右键放开
+EVENT_MBUTTONUP              //中键放开
+EVENT_LBUTTONDBLCLK          //左键双击
+EVENT_RBUTTONDBLCLK          //右键双击
+EVENT_MBUTTONDBLCLK          //中键双击
+
+EVENT_FLAG_LBUTTON        //左鍵拖曳
+EVENT_FLAG_RBUTTON        //右鍵拖曳
+EVENT_FLAG_MBUTTON        //中鍵拖曳
+EVENT_FLAG_CTRLKEY        //(8~15)按Ctrl不放事件
+EVENT_FLAG_SHIFTKEY      //(16~31)按Shift不放事件
+EVENT_FLAG_ALTKEY        //(32~39)按Alt不放事件
+```
+
+鼠标事件发生后会调用对应的回调函数，从而执行对应的操作。
+
+```c++
+/**
+  * @brief	鼠标事件设置函数
+  * @param  winname 	窗口的名字
+  * @param  onMouse 	鼠标响应回调函数。指定窗口里每次鼠标时间发生的时候，被调用的函数指针。
+  						这个函数的原型应该为void on_Mouse(int event, int x, int y, int flags, void* param);
+  * @param  userdate 	传给回调函数的参数
+  */
+void setMousecallback(const string& winname, MouseCallback onMouse, void* userdata=0);
+```
+
+```c++
 #include <opencv2/opencv.hpp>
-#include <opencv2/highgui/highgui.hpp>
+#include <iostream>
 
 using namespace std;
 using namespace cv;
 
+Mat img = Mat::zeros(Size(640, 480), CV_8UC3);
+bool draw_flag, mode;
+int ix, iy;
+
+/**
+ * @brief   鼠标事件回调函数
+ */
+void mouse_event_callback(int event, int x, int y, int flags, void *param)
+{
+
+    switch (event)
+    {
+    case EVENT_LBUTTONDOWN:
+        draw_flag = true;
+        ix = x;
+        iy = y;
+        break;
+    case EVENT_MOUSEMOVE:
+        if (flags == EVENT_FLAG_LBUTTON)
+        {
+            if (mode == true)
+            {
+                circle(img, Point(x, y), 10, Scalar(0, 255, 0), -1, LINE_AA);
+            }
+            else if (mode == false)
+            {
+                rectangle(img, Point(x - 10, y - 10), Point(x + 10, y + 10), Scalar(255, 0, 0), -1, LINE_AA);
+            }
+        }
+        break;
+    case EVENT_LBUTTONUP:
+        draw_flag = false;
+    default:
+        break;
+    }
+}
+
 int main()
 {
-	cout << "OpenCv Version: " << CV_VERSION << endl;
-	FileStorage file;
-	string filename = "text.yaml";
-
-	file.open(filename, FileStorage::WRITE);
-
-	if (!file.isOpened())
-	{
-		cout << "Fail to open!" << endl;
-		return -1;
-	}
-
-	Mat mat = Mat::eye(3, 3, CV_8U);
-
-	file.write("Mat", mat);
-
-	float x = 100;
-	file << "x" << x;
-
-	string str = "Test";
-	file << "str" << str;
-
-	file <<  "Array" << "[" << 1 << 2 << 3 << 4 << "]";
-
-	file << "Time" << "{" << "year" << 2022 << "month" << 2 << "day" << 17 << "d_time" << "[" << 0 << 1 << 2 << 3 << "]" << "}";
-
-	file.release();
-
-	FileStorage rfile;
-	rfile.open(filename, FileStorage::READ);
-
-	if (!rfile.isOpened())
-	{
-		cout << "Fail to open!" << endl;
-		return -1;
-	}
-
-	float x_r;
-	rfile["x"] >> x_r;
-	cout << "x_r = " << x_r << endl;
-
-	string str_r;
-	rfile["str"] >> str_r;
-	cout << "str_r = " << str_r << endl;
-
-	FileNode node = rfile["Array"];
-	cout << "Array = [";
-	for (FileNodeIterator it = node.begin(); it != node.end(); it++)
-	{
-		int i;
-		*it >> i;
-		cout << i << " ";
-	}
-	cout << "]" << endl;
-
-	Mat mat_r;
-	rfile["Mat"] >> mat_r;
-	cout << "mat_r = " << mat_r << endl;
-
-	FileNode t_node = rfile["Time"];
-	int year_r = (int)t_node["year"];
-	int month_r = (int)t_node["month"];
-	int day_r = (int)t_node["day"];
-	int hour_r = (int)t_node["d_time"][0];
-	int minute_r = (int)t_node["d_time"][1];
-	int second_r = (int)t_node["d_time"][2];
-
-	cout << "Time: " << year_r << "." << month_r << "." << day_r << "." << hour_r << ":" << minute_r << ":" << second_r << endl;
-
-
-	rfile.release();
-	system("pause");
-	return 0;
+    namedWindow("img");
+    setMouseCallback("img", mouse_event_callback);
+    for (;;)
+    {
+        imshow("img", img);
+        int key = waitKey(1);
+        if (key == 27)
+        {
+            break;
+        }
+    }
+    destroyAllWindows();
+    return 0;
 }
 ```
+
+## 6. 滑动条
+
+```c++
+/**
+  * @brief	滑动条创建函数
+  * @param 	trackbarname 	滑动条名称
+  * @param 	winname 		窗口名称
+  * @param  value 			滑动条初始值
+  * @param  count 			滑动条最大值，最小值默认为0
+  * @param  onChange 		回调函数指针，回调函数应有 void tracebar_callback(int value, void *userdata) 形式
+  * @param  userdata  		返回数据
+  */
+int createTrackbar(const String& trackbarname, const String& winname,
+                              int* value, int count,
+                              TrackbarCallback onChange = 0,
+                              void* userdata = 0);
+
+/**
+  * @brief	滑动条数值读取函数
+  * @param 	trackbarname 	滑动条名称
+  * @param 	winname 		窗口名称
+  */
+int getTrackbarPos(const String& trackbarname, const String& winname);
+```
+
