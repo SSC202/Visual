@@ -4,7 +4,7 @@
 
 这些离散的点如果希望实现**基于邻域关系的快速查找比对**功能，就必须对这些离散的点之间建立拓扑关系。常见的空间索引一般是自上而下逐级划分空间的各种索引结构，包括BSP树，k-d tree、KDB tree、R tree、CELL tree、八叉树等。
 
-## 1. k-d Tree分割法和K近邻搜索
+## 1. k-d Tree和K近邻搜索
 
 ### k-d Tree 的构建
 
@@ -133,3 +133,14 @@ $$
 template <typename PointT, typename Dist> int pcl::KdTreeFLANN<PointT,Dist>::radiusSearch (const PointT &point, double radius, std::vector<int> &k_indices,std::vector<float> &k_sqr_dists,unsigned int max_nn) const;
 ```
 
+## 3. Oc Tree
+
+八叉树的定义是：若不为空树的话，树中任一节点的子节点恰好只会有八个，或零个，也就是子节点不会有0与8以外的数目。八叉树就是用在3D空间中的场景管理，可以很快地知道物体在3D场景中的位置，或侦测与其它物体是否有碰撞以及是否在可视范围内。
+
+> 1. 将当前的立方体细分为八个子立方体。
+> 1. 如果任何一个子立方体内包含多个点，则将其进一步细分为八个子立方体。
+> 1. 重复以上操作使得每个子立方体内包含最多一个点。
+
+![NULL](./assets/picture_12.jpg)
+
+`pcl_octree` 实现提供了有效的最近邻居搜索（邻域搜索）API，例如“ 体素（`Voxel`）邻居搜索”，“K最近邻居搜索”和“半径搜索邻居”。叶子节点类也提供其他功能，例如空间“占用率”和“每个体素（`Voxel`）的点密度”检查；序列化和反序列化功能可将八叉树结构有效地编码为二进制格式；此外，内存池实现减少了昂贵的内存分配和释放操作，以便快速创建八叉树。
