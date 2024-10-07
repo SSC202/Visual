@@ -126,7 +126,7 @@ template <typename PointT, typename Dist> int pcl::KdTreeFLANN<PointT,Dist>::rad
    ```c++
      /** \brief 体素搜索，在给定点上搜索体素邻居
       * \param[in] point 			指向叶子节点体素的点
-      * \param[in] point_idx_data  相邻
+      * \param[in] point_idx_data  相邻体素点的下标
       * \return	如果存在叶节点，则为true
       */
    bool pcl::octree::OctreePointCloudSearch<PointT, LeafContainerT, BranchContainerT>::voxelSearch  (const PointT &point,  Indices &point_idx_data);
