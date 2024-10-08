@@ -1,125 +1,140 @@
-#include <iostream>
+#include <pcl/ModelCoefficients.h>
 #include <pcl/point_types.h>
 #include <pcl/io/pcd_io.h>
-#include <pcl/filters/extract_indices.h>       // 根据索引提取点云
-#include <pcl/filters/voxel_grid.h>            // 体素滤波
-#include <pcl/kdtree/kdtree.h>                 // kd树
-#include <pcl/sample_consensus/method_types.h> // 采样方法
-#include <pcl/sample_consensus/model_types.h>  // 采样模型
-#include <pcl/ModelCoefficients.h>             // 模型系数
-#include <pcl/segmentation/sac_segmentation.h> // 随机采样分割
-#include <pcl/segmentation/extract_clusters.h> // 欧式聚类分割
-#include <pcl/visualization/pcl_visualizer.h> 
+#include <pcl/filters/extract_indices.h>
+#include <pcl/filters/voxel_grid.h>
+#include <pcl/features/normal_3d.h>
+#include <pcl/kdtree/kdtree.h>
+#include <pcl/sample_consensus/method_types.h>
+#include <pcl/sample_consensus/model_types.h>
+#include <pcl/segmentation/sac_segmentation.h>
+#include <pcl/segmentation/extract_clusters.h>
+#include <pcl/visualization/pcl_visualizer.h>
 
-using namespace std;
+int main(int argc, char** argv) {
+    // Read in the cloud data
+    pcl::PCDReader reader;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>), cloud_f(
+        new pcl::PointCloud<pcl::PointXYZ>);
+    reader.read("test.pcd", *cloud);
+    std::cout << "PointCloud before filtering has: " << cloud->points.size() << " data points." << std::endl; //*
 
-int main(int argc, char** argv)
-{
-    //--------------------------读取桌面场景点云---------------------------------
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
-    pcl::io::loadPCDFile<pcl::PointXYZ>("test.pcd", *cloud);
-    cout << "读取点云: " << cloud->points.size() << " 个." << endl;
-
-    //---------------------------体素滤波下采样----------------------------------
+    // Create the filtering object: downsample the dataset using a leaf size of 1cm
+    // 执行降采样滤波，叶子大小1cm
     pcl::VoxelGrid<pcl::PointXYZ> vg;
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZ>);
     vg.setInputCloud(cloud);
     vg.setLeafSize(0.01f, 0.01f, 0.01f);
     vg.filter(*cloud_filtered);
-    cout << "体素滤波后还有: " << cloud_filtered->points.size() << " 个." << endl;
+    std::cout << "PointCloud after filtering has: " << cloud_filtered->points.size() << " data points."
+        << std::endl; //*
 
-    //--------------------创建平面模型分割的对象并设置参数-----------------------
+    // Create the segmentation object for the planar model and set all the parameters
+    // 创建平面模型分割器并初始化参数
     pcl::SACSegmentation<pcl::PointXYZ> seg;
     pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
     pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_plane(new pcl::PointCloud<pcl::PointXYZ>);
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_plane(new pcl::PointCloud<pcl::PointXYZ>());
+    pcl::PCDWriter writer;
     seg.setOptimizeCoefficients(true);
-    seg.setModelType(pcl::SACMODEL_PLANE);    // 分割模型,平面模型
-    seg.setMethodType(pcl::SAC_RANSAC);       // 参数估计方法,随机采样一致性　
-    seg.setMaxIterations(100);                // 最大的迭代的次数
-    seg.setDistanceThreshold(0.02);           // 设置符合模型的内点阈值
+    seg.setModelType(pcl::SACMODEL_PLANE);
+    seg.setMethodType(pcl::SAC_RANSAC);
+    seg.setMaxIterations(100);
+    seg.setDistanceThreshold(0.02);
 
-    // -------------模型分割,直到剩余点云数量在30%以上,确保模型点云较好----------
-    int i = 0, nr_points = (int)cloud_filtered->points.size();// 下采样前点云数量
-    while (cloud_filtered->points.size() > 0.3 * nr_points)
-
-    {
+    int i = 0, nr_points = (int)cloud_filtered->points.size();
+    while (cloud_filtered->points.size() > 0.3 * nr_points) {
+        // Segment the largest planar component from the remaining cloud
+        // 移除剩余点云中最大的平面
         seg.setInputCloud(cloud_filtered);
-        seg.segment(*inliers, *coefficients);// 分割
-        if (inliers->indices.size() == 0)
-        {
-            cout << "Could not estimate a planar model for the given dataset." << endl;
+        // 执行分割，将分割出来的平面点云索引保存到inliers中
+        seg.segment(*inliers, *coefficients);
+        if (inliers->indices.size() == 0) {
+            std::cout << "Could not estimate a planar model for the given dataset." << std::endl;
             break;
         }
-        //---------------------------根据索引提取点云-------------------------------
+
+        // Extract the planar inliers from the input cloud
+        // 从输入点云中取出平面内点
         pcl::ExtractIndices<pcl::PointXYZ> extract;
         extract.setInputCloud(cloud_filtered);
-        extract.setIndices(inliers);         // 提取符合平面模型的内点
+        extract.setIndices(inliers);
         extract.setNegative(false);
-        //--------------------------平面模型内点------------------------------------
+
+        // Get the points associated with the planar surface
+        // 得到与平面相关的点cloud_plane
         extract.filter(*cloud_plane);
-        cout << "平面模型: " << cloud_plane->points.size() << "个点." << endl;
-        //-------------------移去平面局内点，提取剩余点云---------------------------
-        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_f(new pcl::PointCloud<pcl::PointXYZ>);
+        std::cout << "PointCloud representing the planar component: " << cloud_plane->points.size() << " data points."
+            << std::endl;
+
+        // Remove the planar inliers, extract the rest
+        // 从点云中剔除这些平面内点，提取出剩下的点保存到cloud_f中，并重新赋值给cloud_filtered。
         extract.setNegative(true);
         extract.filter(*cloud_f);
-        *cloud_filtered = *cloud_f;         // 剩余点云
+        *cloud_filtered = *cloud_f;
     }
 
-    // --------------桌子平面上的点云团,　使用欧式聚类的算法对点云聚类分割----------
+    // Creating the KdTree object for the search method of the extraction
+    // 为提取算法的搜索方法创建一个KdTree对象
     pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
-    tree->setInputCloud(cloud_filtered);              // 桌子平面上其他的点云
-    vector<pcl::PointIndices> cluster_indices;        // 点云团索引
-    pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;// 欧式聚类对象
-    ec.setClusterTolerance(0.02);                     // 设置近邻搜索的搜索半径为2cm（也即两个不同聚类团点之间的最小欧氏距离）
-    ec.setMinClusterSize(100);                        // 设置一个聚类需要的最少的点数目为100
-    ec.setMaxClusterSize(25000);                      // 设置一个聚类需要的最大点数目为25000
-    ec.setSearchMethod(tree);                         // 设置点云的搜索机制
-    ec.setInputCloud(cloud_filtered);
-    ec.extract(cluster_indices);                      // 从点云中提取聚类，并将点云索引保存在cluster_indices中
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_cluster_all(new pcl::PointCloud<pcl::PointXYZ>);
+    tree->setInputCloud(cloud_filtered);
 
-    //------------迭代访问点云索引cluster_indices,直到分割处所有聚类---------------
+    /**
+     * 在这里，我们创建一个PointIndices的vector，该vector在vector <int>中包含实际的索引信息。
+     * 每个检测到的簇的索引都保存在这里-请注意，cluster_indices是一个vector，包含多个检测到的簇的PointIndices的实例。
+     * 因此，cluster_indices[0]包含我们点云中第一个 cluster(簇)的所有索引。
+     *
+     * 从点云中提取簇（集群）,并将点云索引保存在 cluster_indices 中。
+     */
+    std::vector<pcl::PointIndices> cluster_indices;
+    pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
+    ec.setClusterTolerance(0.02);               // 设置临近搜索的搜索半径（搜索容差）为2cm
+    ec.setMinClusterSize(100);                  // 每个簇（集群）的最小大小
+    ec.setMaxClusterSize(25000);                // 每个簇（集群）的最大大小
+    ec.setSearchMethod(tree);                   // 设置点云搜索算法
+    ec.setInputCloud(cloud_filtered);           // 设置输入点云
+    ec.extract(cluster_indices);                // 设置提取到的簇，将每个簇以索引的形式保存到cluster_indices;
+
+    pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer("3D Viewer"));
+
+    // 为了从点云索引向量中分割出每个簇，必须迭代访问点云索引，
     int j = 0;
-    for (vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin(); it != cluster_indices.end(); ++it)
-    {
+    for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin();
+        it != cluster_indices.end(); ++it) {
+
+        // 每次创建一个新的点云数据集，并且将所有当前簇的点写入到点云数据集中。
         pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_cluster(new pcl::PointCloud<pcl::PointXYZ>);
-        //创建新的点云数据集cloud_cluster，将所有当前聚类写入到点云数据集中
-        for (vector<int>::const_iterator pit = it->indices.begin(); pit != it->indices.end(); ++pit)
-            cloud_cluster->points.push_back(cloud_filtered->points[*pit]); //获取每一个点云团的点
+        const std::vector<int>& indices = it->indices;
+
+        for (std::vector<int>::const_iterator pit = indices.begin(); pit != indices.end(); ++pit)
+            cloud_cluster->points.push_back(cloud_filtered->points[*pit]);
 
         cloud_cluster->width = cloud_cluster->points.size();
         cloud_cluster->height = 1;
         cloud_cluster->is_dense = true;
 
-        cout << "PointCloud representing the Cluster: " << cloud_cluster->points.size() << " data points." << endl;
-        stringstream ss;
-        ss << "cloud_cluster_" << j << ".pcd";
-        pcl::PCDWriter writer;
-        writer.write<pcl::PointXYZ>(ss.str(), *cloud_cluster, false);
+        std::cout << "PointCloud representing the Cluster: " << cloud_cluster->points.size() << " data points."
+            << std::endl;
+        /*
+            std::stringstream ss;
+            ss << "cloud_cluster_" << j << ".pcd";
+            writer.write<pcl::PointXYZ>(ss.str(), *cloud_cluster, false); //
+        */
+        std::stringstream ss;
+        ss << "cloud_cluster_" << j;
+        // Generate a random (bright) color
+        pcl::visualization::PointCloudColorHandlerRandom<pcl::PointXYZ> single_color(cloud_cluster);
+        viewer->addPointCloud<pcl::PointXYZ>(cloud_cluster, single_color, ss.str());
+        viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, ss.str());
+
         j++;
-
-        *cloud_cluster_all += *cloud_cluster;
     }
-    pcl::io::savePCDFileASCII("cloud_cluster_all.pcd", *cloud_cluster_all);
+    std::cout << "cloud size: " << cluster_indices.size() << std::endl;
 
-    //------------------------点云显示------------------------------------
-    pcl::visualization::PCLVisualizer viewer("3D Viewer");
-    viewer.setBackgroundColor(0, 0, 0);
-    //viewer.addCoordinateSystem (1.0);
-    viewer.initCameraParameters();
-    //--------------------平面上的点云　红色------------------------------
-    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> cloud_plane_handler(cloud_plane, 255, 0, 0);
-    viewer.addPointCloud(cloud_plane, cloud_plane_handler, "plan point");
-    viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "plan point");
-
-    //--------------------平面外的点云　绿色------------------------------
-    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> cloud_cluster_handler(cloud_cluster_all, 0, 255, 0);
-    viewer.addPointCloud(cloud_cluster_all, cloud_cluster_handler, "cloud_cluster point");
-    viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "cloud_cluster point");
-
-    while (!viewer.wasStopped()) {
-        viewer.spinOnce(100);
+    viewer->addCoordinateSystem(0.5);
+    while (!viewer->wasStopped()) {
+        viewer->spinOnce();
     }
+
     return (0);
 }
