@@ -1,76 +1,22 @@
 #include "Kmeans.h"
 #include <pcl/io/pcd_io.h>
-#include <pcl/common/angles.h>
 #include <pcl/common/time.h>
 
 using namespace std;
 
 int main()
 {
-	// 加载点云
+	// -------------------------------加载点云-----------------------------
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
-
-	// 构造球体
-	float radius = 2;
-	for (float r = 0; r < radius; r += 0.1)
+	if (pcl::io::loadPCDFile<pcl::PointXYZ>("test.pcd", *cloud) == -1)
 	{
-		for (float angle1 = 0.0; angle1 <= 180.0; angle1 += 5.0)
-		{
-			for (float angle2 = 0.0; angle2 <= 360.0; angle2 += 5.0)
-			{
-				pcl::PointXYZ basic_point;
-
-				basic_point.x = radius * sinf(pcl::deg2rad(angle1)) * cosf(pcl::deg2rad(angle2));
-				basic_point.y = radius * sinf(pcl::deg2rad(angle1)) * sinf(pcl::deg2rad(angle2));
-				basic_point.z = radius * cosf(pcl::deg2rad(angle1));
-				cloud->points.push_back(basic_point);
-			}
-		}
+		PCL_ERROR("读取源标点云失败 \n");
+		return (-1);
 	}
-
-	// 构造立方体
-	float cube_len = 2;
-	for (float x = 0; x < cube_len; x += 0.1)
-	{
-		for (float y = 0; y < cube_len; y += 0.1)
-		{
-			for (float z = 0; z < cube_len; z += 0.1)
-			{
-				pcl::PointXYZ basic_point;
-
-				// 沿着向量(2.5, 2.5, 2.5)平移
-				basic_point.x = x + 2.5;
-				basic_point.y = y + 2.5;
-				basic_point.z = z + 2.5;
-				cloud->points.push_back(basic_point);
-			}
-		}
-	}
-
-	// 构造圆形平面
-	float R = 1;
-	for (float radius = 0; radius < R; radius += 0.05)
-	{
-		for (float r = 0; r < radius; r += 0.05)
-		{
-			for (float ang = 0; ang <= 360.0; ang += 5.0)
-			{
-				pcl::PointXYZ basic_point;
-
-				basic_point.x = radius * sinf(pcl::deg2rad(ang)) + 3;
-				basic_point.y = radius * cosf(pcl::deg2rad(ang)) + 3;
-				basic_point.z = -3;
-				cloud->points.push_back(basic_point);
-			}
-		}
-	}
-
-	cloud->width = (int)cloud->points.size();
-	cloud->height = 1;
-
+	cout << "从点云中读取 " << cloud->size() << " 个点" << endl;
 	// ------------------------------K均值聚类-----------------------------
 	pcl::StopWatch time;
-	int clusterNum = 3; // 聚类个数
+	int clusterNum = 8; // 聚类个数
 	int maxIter = 50;   // 最大迭代次数
 	KMeans kmeans(clusterNum, maxIter);
 	std::vector<pcl::Indices> cluster_indices;
