@@ -895,3 +895,38 @@ MI是指互信息（MI，Mutual Information），一种全局的代价计算方�
     stereo = cv2.StereoSGBM_create(minDisparity = 1,numDisparities = 64,blockSize = blockSize,P1 = 8 * img_channels * blockSize * blockSize,P2 = 32 * img_channels * blockSize * blockSize,disp12MaxDiff = -1,preFilterCap = 1,uniquenessRatio = 10,speckleWindowSize = 100,speckleRange = 100,mode = cv2.STEREO_SGBM_MODE_HH)
     ```
 
+### 立体匹配问题
+
+以下几种情形生成的深度图像可能会有缺陷：
+
+1. 光学失真和噪声（亮度、色调、饱和度等失衡）
+
+   ![NULL](./assets/picture_17.jpg)
+
+2. 平滑表面的镜面反射，高光处无细节，无特征点。
+
+   ![NULL](./assets/picture_18.jpg)
+
+3.  投影缩减，由于相对左右照相机距离的不同，看到的同一个物体在左右视图中的投影尺寸也会不同，造成匹配障碍。
+
+   ![NULL](./assets/picture_19.jpg)
+
+4.  透视失真，由于镜头畸变造成的被摄物体失真。
+
+   ![NULL](./assets/picture_20.jpg)
+
+5. 低纹理，无细节。主动纹理光可以解决这一问题。
+
+   ![NULL](./assets/picture_21.jpg)
+
+6. 重复纹理，高度相似的特征点描述向量接近，行扫描时难以判断哪一个是对应的特征点。
+
+   ![NULL](./assets/picture_22.jpg)
+
+7. 透明物体
+
+   ![NULL](./assets/picture_23.jpg)
+
+8. 重叠和非连续，纹理中断，不利于行查找。
+
+   ![NULL](./assets/picture_24.jpg)
