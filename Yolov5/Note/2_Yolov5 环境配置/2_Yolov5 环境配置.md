@@ -10,6 +10,62 @@ cuDNN是NVIDIACUDA®深度神经网络库，是GPU加速的用于深度神经网
 
 ### CUDA 下载和安装
 
+- cuda 安装
+
+  1. 首先安装 NVIDIA 显卡驱动（如果有的话）。
+
+     [NVIDIA GeForce 驱动程序 - N 卡驱动 | NVIDIA](https://www.nvidia.cn/geforce/drivers/)
+
+     ![NULL](./assets/picture_3.jpg)
+
+     选择 Game Ready 驱动程序下载安装即可。
+
+  2. CUDA 安装
+
+     在显卡驱动被正确安装的前提下，终端输入以下指令：
+
+     ```shell
+     $ nvidia-smi
+     ```
+
+     ![NULL](./assets/picture_4.jpg)
+
+     可以看到最大支持的 CUDA 版本为 12.3。
+
+     进入 CUDA 下载官网： [CUDA Toolkit Archive | NVIDIA Developer](https://developer.nvidia.com/cuda-toolkit-archive)，选择 CUDA 版本进行下载。
+
+     ![NULL](./assets/picture_5.jpg)
+
+     ![NULL](./assets/picture_6.jpg)
+
+     按照安装程序安装即可。安装结束后输入以下指令检查环境：
+
+     ```shell
+     $ nvcc -V
+     ```
+
+     ![NULL](./assets/picture_7.jpg)
+
+- cudnn 安装
+
+  进入 cudnn 官网：[cuDNN Archive | NVIDIA Developer](https://developer.nvidia.com/rdp/cudnn-archive)
+
+  ![NULL](./assets/picture_8.jpg)
+
+  把解压后的bin、include、lib三个文件夹的文件分别拷贝到CUDA安装目录对应的（bin、include、lib）文件夹中即可。
+
+
+- Python 的 cuda 安装
+
+	yolov5 支持的 pytorch 版本为 1.8.0。在官网中检查支持的 cuda 版本：
+	
+	![NULL](./assets/picture_9.jpg)
+	
+	```shell
+	# CUDA 11.1
+	$ pip install torch==1.8.0+cu111 torchvision==0.9.0+cu111 torchaudio==0.8.0 -f https://download.pytorch.org/whl/torch_stable.html
+	```
+
 ## 2. Anaconda
 
 （略）
@@ -40,6 +96,20 @@ $ pip install -r requirements.txt
 
 ### 检查安装
 
-在yolov5路径下运行`detect.py`文件，若正常运行则说明yolov5安装成功，运行结果可以`runs\`文件夹下看到。
+- CPU 训练
 
-![NULL](./assets/picture_2.jpg)
+	在yolov5路径下运行`train.py`文件。
+	
+	![NULL](./assets/picture_2.jpg)
+
+	出现上述终端日志则成功。
+	
+- GPU 训练
+
+  在yolov5路径下运行`train.py`文件。修改参数：
+
+  ```python
+  parser.add_argument("--device", default="", help="cuda device, i.e. 0 or 0,1,2,3 or cpu")
+  ```
+
+  ![NULL](./assets/picture_10.jpg)
