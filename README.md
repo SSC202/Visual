@@ -4,7 +4,7 @@
 
 本库是有关于视觉方面的学习笔记
 
-## OpenCV_Python
+## OpenCV
 
 OpenCV Python 学习笔记
 
