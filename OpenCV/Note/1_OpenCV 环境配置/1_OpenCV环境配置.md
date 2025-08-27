@@ -1,5 +1,9 @@
 # OpenCV Python 1_环境配置
 
+> 本笔记使用 Python 环境，旨在学习 OpenCV 算法本身。
+>
+> Python 适合学习算法，C++ 更适合实际部署。
+
 [OpenCV - Open Computer Vision Library](https://opencv.org/)
 
 ## 0. OpenCV 简介
