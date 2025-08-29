@@ -576,7 +576,7 @@ cv2.bilateralFilter()
 
 图像的腐蚀过程与图像的卷积操作类似，都需要模板矩阵来控制运算的结果，在图像的腐蚀和膨胀中这个模板矩阵被称为**结构元素**。
 
-![NULL](picture_1.jpg)
+![NULL](./assets/picture_1.jpg)
 
 定义结构元素之后，将结构元素的中心点依次放到图像中每一个非0元素处，**如果此时结构元素内所有的元素所覆盖的图像像素值均不为0，则保留结构元素中心点对应的图像像素**，否则将删除结构元素中心点对应的像素。
 
@@ -594,7 +594,7 @@ cv2.bilateralFilter()
 cv2.erode()
 ```
 
-![NULL](picture_2.jpg)
+![NULL](./assets/picture_2.jpg)
 
 ```python
 import cv2
@@ -620,7 +620,7 @@ cv2.destroyAllWindows()
 
 定义结构元素之后，将结构元素的中心点依次放到图像中每一个非0元素处，**如果原图像中某个元素被结构元素覆盖，但是该像素的像素值不与结构元素中心点对应的像素点的像素值相同，那么将原图像中的该像素的像素值修改为结构元素中心点对应点的像素值。**
 
-![NULL](picture_3.jpg)
+![NULL](./assets/picture_3.jpg)
 
 ```python
 """
@@ -632,7 +632,7 @@ cv2.destroyAllWindows()
 cv2.dilate()
 ```
 
-![NULL](picture_4.jpg)
+![NULL](./assets/picture_4.jpg)
 
 ### 开运算
 
@@ -650,7 +650,7 @@ cv2.dilate()
 cv2.morphologyEx()
 ```
 
-![NULL](picture_5.jpg)
+![NULL](./assets/picture_5.jpg)
 
 ### 闭运算
 
@@ -668,7 +668,7 @@ cv2.morphologyEx()
 cv2.morphologyEx()
 ```
 
-![NULL](picture_6.jpg)
+![NULL](./assets/picture_6.jpg)
 
 ### 形态学梯度
 
@@ -684,7 +684,7 @@ cv2.morphologyEx()
 cv2.morphologyEx()
 ```
 
-![NULL](picture_7.jpg)
+![NULL](./assets/picture_7.jpg)
 
 ### 礼帽
 
@@ -700,7 +700,7 @@ cv2.morphologyEx()
 cv2.morphologyEx()
 ```
 
-![NULL](picture_8.jpg)
+![NULL](./assets/picture_8.jpg)
 
 ### 黑帽
 
@@ -716,7 +716,7 @@ cv2.morphologyEx()
 cv2.morphologyEx()
 ```
 
-![NULL](picture_9.jpg)
+![NULL](./assets/picture_9.jpg)
 
 ### 关于结构元素
 
@@ -735,11 +735,39 @@ cv2.getStructuringElement()
 
 图像的梯度就是对两个像素求导数，是边缘检测的前提。
 
+图像可以视为一个二元函数 $f(x,y)$，需要对其求偏导数/梯度，但是由于图像是离散的，只能进行差分求解。
+
+> 求导可以用卷积进行表示：
+>
+> - x 方向上的偏导数：$\frac{\partial f(x,y)}{\partial x} = f(x+1,y) - f(x)$；
+>
+>   ![NULL](./assets/picture_11.jpg)
+>   
+> - y 方向的偏导数：
+>
+>   ![NULL](./assets/picture_12.jpg)
+>
+> 结合连续域下的偏导数/梯度公式，可以计算特定方向的导数。
+
 Sobel 算子和 Scharr 算子为求一阶或二阶导数，Scharr 算子为对 Sobel 算子的优化。Laplacian 算子为求二阶导数。 
 
 ### Sobel 算子和 Scharr 算子
 
 Sobel 算子为高斯平滑和微分操作的结合，抗噪声能力强。可以设定求导的方向（xorder 和    yorder）和卷积核大小（ksize）。
+
+> 实际图像的噪声很大，如果直接求导会造成以下的情况：
+>
+> ![NULL](./assets/picture_13.jpg)
+>
+> 导数的极值到处都是，难以检测边缘，此时需要先平滑再求导。
+>
+> ![NULL](./assets/picture_14.jpg)
+>
+> 注意平滑是卷积操作，在数学上，卷积有交换律和结合律，由此等效于对高斯卷积核做导数然后用该导数进行卷积。即一维 Sobel 算子：
+>
+> ![NULL](./assets/picture_15.jpg)
+>
+> 二维 Sobel 算子不能分解为两个独立的一维 Sobel 算子(高斯函数的导数)。但是二维·高斯卷积核可以分解为两个独立的一维高斯卷积核。
 
 `ksize = -1` 时使用 Scharr 算子作为滤波器，效果更好。
 
@@ -779,27 +807,31 @@ cv2.Laplacian()
 
 ## 7. Canny 边缘检测
 
+> 边缘检测具体理论：[边缘检测及Canny算法](https://zhuanlan.zhihu.com/p/1886375609992710041)
+
 Canny 边缘检测是一种流行的边缘检测算法。
 
-**第一步：噪声去除**
+**第一步：用高斯偏导卷积核进行卷积，滤波后计算图像梯度**
 
-使用5×5的高斯滤波器进行滤波。
+使用 Sobel 算子计算水平和竖直方向的一阶导数，根据图像的梯度图(两幅图)找到边界的梯度和方向，图像的梯度方向总与边界垂直。（效果不好可以在前面加一个高斯滤波器）
 
-**第二步：计算图像梯度**
+**第二步：非极大值抑制**
 
-使用 Sobel 算子计算水平和竖直方向的一阶导数，根据图像的梯度图找到边界的梯度和方向，图像的梯度方向总与边界垂直。
+由于做了高斯模糊，阈值以上部分边缘看起来很粗，设置阈值之后，阈值以上的部分是一段相对较粗的区域，边缘的具体位置不精确，因此需要进行非极大值抑制。
 
-**第三步：非极大值抑制**
+![NULL](./assets/picture_16.jpg)
 
-获得梯度的方向和大小之后，对整幅图像进行扫描，去除非边界点，对每一个像素进行检查，检查此点梯度值是否为同向最大值。
+获得梯度的方向和大小之后，对整幅图像进行扫描，去除非边界点，对每一个像素进行检查，检查此点梯度值是否为**同向最大值**，不是则舍掉该点。
 
-**第四步：滞后阈值**
+此时可能导致得到的边界不连通(梯度变化不明显，检测出的边缘无法连通)；而如果降低阈值，有可能引入更多的噪声因素，由此引入双阈值检测。
 
-设置小阈值`minVal`和大阈值`maxVal`。
+**第三步：滞后阈值**
 
-1. 高于`maxVal`的点为真边界点；
+设置小阈值`minVal`和大阈值`maxVal`，检查经过非极大值抑制后得到的梯度图像。
+
+1. 高于`maxVal`的点为真边界点，这部分梯度变化剧烈且稳定，受噪声干扰小；
 2. 低于`minVal`的点被舍弃；
-3. 若在`maxVal`和`minVal`之间，如果这个点和确定的边界点相连，会被认为为真边界点。
+3. 若在`maxVal`和`minVal`之间，如果这个点和确定的边界点相连(8邻域)，会被认为为真边界点。
 
 ```python
 """
@@ -853,7 +885,7 @@ cap.release()
 
 ### 高斯金字塔
 
-![NULL](picture_10.jpg)
+![NULL](./assets/picture_10.jpg)
 
 **下采样**
 
