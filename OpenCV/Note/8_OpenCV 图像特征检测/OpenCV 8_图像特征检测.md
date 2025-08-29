@@ -551,6 +551,16 @@ Harr特征值反应了图像灰度变化的情况，这个主方向就是描述�
 
 SURF 算法中，在特征点周围取一个4×4的矩形区域块，但是所取得矩形区域方向是沿着特征点的主方向。每个子区域统计25个像素的水平方向和垂直方向的Haar小波特征，这里的水平和垂直方向都是相对主方向而言的。该Haar小波特征为水平方向值之和、垂直方向值之和、水平方向绝对值之和以及垂直方向绝对值之和4个方向。把这4个值作为每个子块区域的特征向量。
 
+> SIFT 和 SURF 区别：
+>
+> 1. 在生成尺度空间方面，SIFT 中下一组图像的尺寸是上一组的一半，同一组间图像尺寸一样，但是所使用的高斯模糊系数逐渐增大。而在SURF中，不同组间图像的尺寸都是一致的，但不同组间使用的盒式滤波器的模板尺寸逐渐增大，同一组间不同层间使用相同尺寸的滤波器，但是滤波器的模糊系数逐渐增大。
+>
+> 2. 在特征点检验时，SIFT 算子是先对图像进行非极大值抑制，再去除对比度较低的点。然后通过 Hessian 矩阵去除边缘的点。SURF 算法是先通过 Hessian 矩阵来检测候选特征点，然后再对非极大值的点进行抑制。
+>
+> 3. 在特征向量的方向确定上，SIFT算法是在正方形区域内统计梯度的幅值的直方图，找到最大梯度幅值所对应的方向。SIFT算子确定的特征点可以有一个或一个以上方向，其中包括一个主方向与多个辅方向。SURF算法则是在圆形邻域内，检测各个扇形范围内水平、垂直方向上的Haar小波响应，找到模值最大的扇形指向，且该算法的方向只有一个。
+>
+> 4. SIFT算法生成描述子时，是将16x16的采样点划分为4x4的区域，从而计算每个分区种子点的幅值并确定其方向，共计4x4x8=128维。SURF算法在生成特征描述子时将的正方形分割成4x4的小方格，每个子区域25个采样点，计算小波Haar响应，一共4x4x4=64维。
+
 ```python
 import cv2
 import numpy as np
@@ -646,5 +656,197 @@ while cap.isOpened() == True:
     
 cv2.destroyAllWindows()
 cap.release()
+```
+
+## 5. ORB 关键点检测
+
+### BRIEF 描述符
+
+BRIEF 对已检测到的特征点进行描述，它是一种二进制编码的描述子，摈弃了利用区域灰度直方图描述特征点的传统方法，大大的加快了特征描述符建立的速度，同时也极大的降低了特征匹配的时间，是一种非常快速，很有潜力的算法。
+
+1. 对图像进行高斯滤波；
+2. 以特征点为中心，取 $S \times S$ 的邻域，窗口内随机取一对点进行灰度值比较，比较结果用 0/1 进行赋值，在窗口中随机选取N对随机点，重复的二进制赋值，形成一个二进制编码，这个编码就是对特征点的描述，即特征描述子。（一般N=256）
+
+随机点选取一般服从各向同性的同一高斯分布。
+
+配对时，特征编码对应位小于 128 的一定不配对。两图中相同位最多的两个点进行配对。
+
+但是，该描述符对噪声敏感，且不具备旋转和尺度不变性。
+
+### ORB 关键点检测
+
+ORB (Oriented FAST and Rotated BRIEF) 算法是对 FAST 特征点检测和 BRIEF 特征描述子的一种结合，在原有的基础上做了改进与优化，使得 ORB 特征具备多种局部不变性，并为实时计算提供了可能。
+
+#### 改进 FAST 角点检测
+
+ORB 首先利用 FAST 算法检测特征点，然后利用 Harris 角点的检测方式，从提取的 FAST 角点中筛选出 N 个 Harris 响应值最大的特征点。
+
+FAST 检测特征点不具备尺度不变性，可以借助尺度空间理论构建图像高斯金字塔，然后在每一层金字塔图像上检测角点，以实现尺度不变性。
+
+FAST 检测特征点不具备旋转不变性，ORB 使用灰度质心法解决：灰度质心法假设灰度质心法假设角点的灰度与质心之间存在一个偏移，这个向量可以用于表示一个方向。换言之，在半径为 $r$ 的邻域内求取灰度质心，从特征点到灰度质心的向量，定义为该特征点的主方向。
+
+特征点的方向矢量定义为特征点的中心 O 与质心 C 形成的向量 OC 与 X 轴的夹角：
+$$
+\theta = arctan(m_{01},m_{10})
+$$
+
+#### 改进 BRIEF 特征描述子
+
+ORB 中利用积分图像，在 31×31 的邻域中选取随机点对，并以选取的随机点为中心，在 5×5 的窗口内计算灰度平均值（灰度和），比较随机点对的邻域灰度均值，进行二进制编码，而不是仅仅由两个随机点对的像素值决定编码结果，可以有效地解决噪声问题。
+
+对于旋转不变性问题，可利用 FAST 特征点检测时求取的主方向，旋转特征点邻域，这种方法称为SBRIEF 。但旋转整个邻域再提取 BRIEF 特征描述子的计算代价较大。
+
+ORB 采用了一种更高效的方式，在每个特征点邻域内，先选取 N 对随机点，将其进行旋转，然后做判决编码为二进制串。通过上述方法得到的特征描述子具有旋转不变性，但匹配效果却不如原始 BRIEF 算法，因为可区分性减弱了。特征描述子的一个要求就是要尽可能地表达特征点的独特性，便于区分不同的特征点。BRIEF 令人惊喜的特性之一是描述子所有比特位的均值接近于 0.5 ，且方差很大。方差越大表明可区分性越好，不同特征点的描述子表现出较大的差异性，不易造成误匹配。但 SBRIEF 进行了坐标旋转，损失了这个特性，导致可区分性减弱，相关性变强，不利于匹配。
+
+为了解决 SBRIEF 可区分性降低的问题，ORB 使用了一种基于学习的方法来选择一定数量的随机点对。首先建立一个大约 300k 特征点的数据集（特征点来源于 PASCAL2006 中的图像），对每个特征点，考虑其 31×31 的邻域，为了去除噪声的干扰，选择 5×5 的子窗口的灰度均值代替单个像素的灰度，这样每个邻域内就有 N=729 个子窗口，从中随机选取 2 个非重复的子窗口，一共有 M 种方法。这样，每个特征点便可提取出一个长度为 M 的二进制串，所有特征点可构成一个 300k × M 的二进制矩阵 Q 。
+$$
+Q = \left[ \begin{matrix}
+p_{1,1} & p_{1,2} & ... & p_{1,M} \\
+p_{2,1} & p_{2,2} & ... & p_{2,M} \\
+... & ... & ... & ... \\
+p_{300k,1} & p_{300k,2} & ... & p_{300k,M}
+\end{matrix}\right]
+$$
+现在需要从 M 个点对中选取 256 个相关性最小、可区分性最大的点对，作为最终的二进制编码。筛选方法如下：
+
+1. 对矩阵 Q 的每一列求取均值，并根据均值与 0.5 之间的距离从小到大的顺序，依次对所有列向量进行重新排序，得到矩阵 T；
+2. 将 T 中的第一列向量放到结果矩阵 R 中；
+3. 取出 T 中的下一列向量，计算其与矩阵 R 中所有列向量的相关性，如果相关系数小于给定阈值，则将 T 中的该列向量移至矩阵 R 中，否则丢弃；
+4. 循环执行上一步，直到 R 中有 256 个列向量；如果遍历 T 中所有列， R 中向量列数还不满 256，则增大阈值，重复以上步骤；
+
+这样，最后得到的就是相关性最小的 256 对随机点，该方法称为 rBRIEF 。
+
+```python
+import numpy as np
+import cv2
+from matplotlib import pyplot as plt
+
+img = cv2.imread("test.jpg", 0)
+
+# 创建 ORB 对象
+orb = cv2.ORB.create()
+
+# 寻找关键点
+kp = orb.detect(img, None)
+
+# 计算描述符
+kp, des = orb.compute(img, kp)
+
+# 绘制关键点
+img2 = cv2.drawKeypoints(img, kp, None, (0, 255, 0), 0)
+plt.imshow(img2), plt.show()
+```
+
+## 6. 特征匹配
+
+### 暴力匹配 Brute-Force
+
+BFMatcher（Brute-Force Matcher）是一种简单的特征匹配算法，它通过计算特征描述子之间的距离来寻找最佳匹配点。BFMatcher 适用于特征点数量较少的情况。
+
+```python
+"""
+	BF 匹配器创建函数
+	normType: 指定使用的距离测试类型,cv2.Norm_L2/cv2.Norm_L1 适合 SIFT/SURF,cv2.NORM_HAMMING 适合 ORB (如果ORB设置VTA_K = 3/4,设置为cv2.NORM_HAMMING2)
+	crossCheck：匹配是否严格，如果是，只有两个特征点互相匹配时才形成匹配。
+	返回值：BF 匹配器
+"""
+cv2.BFMatcher()
+```
+
+```python
+import numpy as np
+import cv2
+from matplotlib import pyplot as plt
+
+img1 = cv2.imread("test1.jpg", 0)
+img2 = cv2.imread("test2.jpg", 0)
+
+orb = cv2.ORB.create()
+
+# 关键点检测
+kp1, des1 = orb.detectAndCompute(img1, None)
+kp2, des2 = orb.detectAndCompute(img2, None)
+
+# 创建 BF 匹配器
+bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+
+# 进行匹配
+# 有两个方法，match和knnMatch，前者返回最佳匹配，后者返回k个最佳匹配
+matches = bf.match(des1, des2)
+
+# 按照距离排序
+# matches 是一个 DMatch 对象列表
+# DMatch.distance - 描述符之间的距离
+# DMatch.trainIdx - 目标图像中描述符的索引
+# DMatch.queryIdx - 查询图像中描述符的索引
+# DMatch.imgIdx   - 目标图像的索引
+matches = sorted(matches, key=lambda x: x.distance)
+
+# 绘制匹配结果
+img3 = cv2.drawMatches(
+    img1,
+    kp1,
+    img2,
+    kp2,
+    matches[:10],
+    None,
+    flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,
+)
+
+plt.imshow(img3)
+plt.show()
+```
+
+### 最近邻匹配 FLANN
+
+FLANN（Fast Library for Approximate Nearest Neighbors）是一种近似最近邻搜索算法，它通过构建KD树或K-means树来加速特征匹配过程。FLANN匹配器适用于特征点数量较多的情况。
+
+```python
+import numpy as np
+import cv2
+from matplotlib import pyplot as plt
+
+# 读入图像
+img1 = cv2.imread("test1.jpg", 0)
+img2 = cv2.imread("test2.jpg", 0)
+
+sift = cv2.SIFT_create()
+kp1, des1 = sift.detectAndCompute(img1, None)
+kp2, des2 = sift.detectAndCompute(img2, None)
+
+# 传入两个字典
+# index_params 确定使用的算法和相关参数，FLANN 文档有详情
+# 使用了5棵树的核密度树索引算法，FLANN可以并行处理此算法。
+index_params = dict(algorithm=1, tree=5)
+# search_params 确定递归遍历的速度
+search_params = dict(checks=50)
+flann = cv2.FlannBasedMatcher(index_params, search_params)
+matches = flann.knnMatch(des1, des2, k=2)
+
+# 应用乘数为0.7的劳氏比率检验。同时，组建一个名为 mask_matches 的列表，其中每个元素都是长度为 k(与传给 KnnMatch 的 k 是一样的)的子列表，如果匹配成功，则将子列表对应的元素设为 1，否则设置为0.
+# 准备一个空的掩膜来绘制好的匹配
+mask_matches = [[0, 0] for i in range(len(matches))]
+
+# 向掩膜中添加数据
+for i, (m, n) in enumerate(matches):
+    if m.distance < 0.7 * n.distance:
+        mask_matches[i] = [1, 0]
+
+img_matches = cv2.drawMatchesKnn(
+    img1,
+    kp1,
+    img2,
+    kp2,
+    matches,
+    None,
+    matchColor=(0, 255, 0),
+    singlePointColor=(255, 0, 0),
+    matchesMask=mask_matches,
+    flags=0,
+)
+
+cv2.imshow("FLANN", img_matches)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
 ```
 
