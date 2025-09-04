@@ -109,9 +109,9 @@
     $$
     \left[
     \begin{matrix}
-    x^, \\
-    y^, \\
-    z^, \\
+    x \\
+    y \\
+    z \\
     \end{matrix}
     \right] = \left[
     \begin{matrix}
@@ -138,7 +138,23 @@
     \right]
     $$
 
-![NULL](./assets/picture_4.jpg)
+    由此得到相机内参模型，$(u,v)$ 为像素坐标 (图像坐标的 $z$ 归一化为1)：
+    $$
+    Z_c\left[
+    \begin{matrix}
+    u \\ v \\ 1
+    \end{matrix}
+    \right] = K
+    \left[
+    \begin{matrix}
+    X_c \\ Y_c \\ Z_c
+    \end{matrix}
+    \right]
+    $$
+    
+    
+    
+    ![NULL](./assets/picture_4.jpg)
 
 #### 相机畸变
 
