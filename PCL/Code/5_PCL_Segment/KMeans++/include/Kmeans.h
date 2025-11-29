@@ -8,19 +8,16 @@
 class KMeans
 {
 private:
-
-	int m_maxIteration; // ×î´óµü´ú´ÎÊı
-	int m_clusterNum;   // ¾ÛÀà¸öÊı
-	//pcl::PointCloud<pcl::PointXYZ>::Ptr m_center; // ¾ÛÀàÖĞĞÄµã
+	int m_maxIteration; // æœ€å¤§è¿­ä»£æ¬¡æ•°
+	int m_clusterNum;   // èšç±»ä¸ªæ•°
 
 public:
-
+	// æ„é€ å‡½æ•°
 	KMeans(int k, int max_iteration) :
-		m_clusterNum(k), m_maxIteration(max_iteration)/**, m_center(new pcl::PointCloud<pcl::PointXYZ>)*/ {}
+		m_clusterNum(k), m_maxIteration(max_iteration) {}
+	
 	~KMeans() {}
 
+	// K-means++ èšç±»ç®—æ³•
 	void extract(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, std::vector<pcl::Indices>& cluster_idx);
-
 };
-
-

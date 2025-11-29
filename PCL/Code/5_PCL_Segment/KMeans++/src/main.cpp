@@ -1,41 +1,63 @@
 #include "Kmeans.h"
 #include <pcl/io/pcd_io.h>
 #include <pcl/common/time.h>
-#include <pcl/visualization/cloud_viewer.h>
+#include <pcl/visualization/pcl_visualizer.h>
+#include <iostream>
+#include <vector>
+#include <thread>
+#include <chrono>
 
 using namespace std;
 
 int main()
 {
-	// ¼ÓÔØµãÔÆ
+	// è¯»å–ç‚¹äº‘
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
 	if (pcl::io::loadPCDFile<pcl::PointXYZ>("test.pcd", *cloud) == -1)
 	{
-		PCL_ERROR("¶ÁÈ¡Ô´±êµãÔÆÊ§°Ü \n");
+		PCL_ERROR("Could not read point cloud file! \n");
 		return (-1);
 	}
-	cout << "´ÓµãÔÆÖĞ¶ÁÈ¡ " << cloud->size() << " ¸öµã" << endl;
-	// K¾ùÖµ¾ÛÀà
+	cout << "Loaded " << cloud->size() << " points from point cloud" << endl;
+
+	// K-means++ èšç±»
 	pcl::StopWatch time;
-	int clusterNum = 3; // ¾ÛÀà¸öÊı
-	int maxIter = 50;   // ×î´óµü´ú´ÎÊı
+	int clusterNum = 7; // èšç±»ä¸ªæ•°æ”¹ä¸º7
+	int maxIter = 50;	// æœ€å¤§è¿­ä»£æ¬¡æ•°
 	KMeans kmeans(clusterNum, maxIter);
 	std::vector<pcl::Indices> cluster_indices;
 	kmeans.extract(cloud, cluster_indices);
-	cout << "¾ÛÀàµÄ¸öÊıÎª£º" << cluster_indices.size() << endl;
-	cout << "´úÂëÔËĞĞÊ±¼ä:" << time.getTimeSeconds() << "Ãë" << endl;
+	cout << "Number of clusters: " << cluster_indices.size() << endl;
+	cout << "Execution time: " << time.getTimeSeconds() << " seconds" << endl;
 
-	// ¾ÛÀà½á¹û·ÖÀà±£´æ
+	// èšç±»ç»“æœåˆ†ç±»ä¿å­˜å’Œå¯è§†åŒ–å‡†å¤‡
 	int begin = 1;
 	pcl::PointCloud<pcl::PointXYZRGB>::Ptr all_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+
+	// é¢„å®šä¹‰é¢œè‰²è¡¨ï¼Œç¡®ä¿é¢œè‰²åŒºåˆ†åº¦
+	std::vector<std::vector<uint8_t>> colors = {
+		{255, 0, 0},   // çº¢è‰²
+		{0, 255, 0},   // ç»¿è‰²
+		{0, 0, 255},   // è“è‰²
+		{255, 255, 0}, // é»„è‰²
+		{255, 0, 255}, // ç´«è‰²
+		{0, 255, 255}, // é’è‰²
+		{255, 128, 0}, // æ©™è‰²
+		{128, 0, 255}, // ç´«ç½—å…°è‰²
+		{128, 255, 0}, // é»„ç»¿è‰²
+		{0, 128, 255}  // å¤©è“è‰²
+	};
+
 	for (auto it = cluster_indices.begin(); it != cluster_indices.end(); ++it)
 	{
-		// »ñÈ¡Ã¿Ò»¸ö¾ÛÀàµãÔÆÍÅµÄµã
+		// è·å–æ¯ä¸€ä¸ªèšç±»ç‚¹äº‘å›¢çš„ç‚¹
 		pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_kmeans(new pcl::PointCloud<pcl::PointXYZRGB>);
-		// Í¬Ò»µãÔÆÍÅ¸³ÉÏÍ¬Ò»ÖÖÑÕÉ«
-		uint8_t R = rand() % (256) + 0;
-		uint8_t G = rand() % (256) + 0;
-		uint8_t B = rand() % (256) + 0;
+
+		// ä½¿ç”¨é¢„å®šä¹‰é¢œè‰²ï¼Œç¡®ä¿é¢œè‰²åŒºåˆ†åº¦
+		std::vector<uint8_t> color = colors[(begin - 1) % colors.size()];
+		uint8_t R = color[0];
+		uint8_t G = color[1];
+		uint8_t B = color[2];
 
 		for (auto pit = it->begin(); pit != it->end(); ++pit)
 		{
@@ -48,19 +70,88 @@ int main()
 			point_db.b = B;
 			cloud_kmeans->points.push_back(point_db);
 		}
-		// ¾ÛÀà½á¹û·ÖÀà±£´æ
-		pcl::io::savePCDFileBinary("kmeans" + std::to_string(begin) + ".pcd", *cloud_kmeans);
+
+		// è®¾ç½®ç‚¹äº‘å±æ€§
+		cloud_kmeans->width = cloud_kmeans->points.size();
+		cloud_kmeans->height = 1;
+		cloud_kmeans->is_dense = true;
+
+		// èšç±»ç»“æœåˆ†ç±»ä¿å­˜
+		pcl::io::savePCDFileBinary("kmeans_cluster_" + std::to_string(begin) + ".pcd", *cloud_kmeans);
+		cout << "Cluster " << begin << " saved with " << cloud_kmeans->points.size() << " points" << endl;
 		begin++;
 
 		*all_cloud += *cloud_kmeans;
 	}
 
-	pcl::visualization::CloudViewer viewer("Kmeans cloud viewer.");
-	viewer.showCloud(all_cloud);
-	while (!viewer.wasStopped())
-	{
+	// å¯è§†åŒ–
 
+	// åˆ›å»ºå¯è§†åŒ–å™¨
+	pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer("K-means++ Clustering Results (7 Clusters)"));
+	viewer->setBackgroundColor(0.05, 0.05, 0.15); // æ·±è“è‰²èƒŒæ™¯
+
+	// å·¦ä¾§è§†å£ - åŸå§‹ç‚¹äº‘
+	int v1(0);
+	viewer->createViewPort(0.0, 0.0, 0.5, 1.0, v1);
+	viewer->setBackgroundColor(0.1, 0.1, 0.2, v1);
+
+	// æ·»åŠ åŸå§‹ç‚¹äº‘ï¼ˆç™½è‰²ï¼‰
+	pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> cloud_white(cloud, 255, 255, 255);
+	viewer->addPointCloud<pcl::PointXYZ>(cloud, cloud_white, "original_cloud", v1);
+	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "original_cloud", v1);
+
+	// æ·»åŠ æ–‡æœ¬è¯´æ˜
+	viewer->addText("Original Point Cloud", 10, 20, 16, 1, 1, 1, "original_text", v1);
+	std::string original_count = "Points: " + std::to_string(cloud->size());
+	viewer->addText(original_count, 10, 40, 14, 1, 1, 1, "original_count", v1);
+
+	// å³ä¾§è§†å£ - èšç±»ç»“æœ
+	int v2(0);
+	viewer->createViewPort(0.5, 0.0, 1.0, 1.0, v2);
+	viewer->setBackgroundColor(0.1, 0.15, 0.1, v2);
+
+	// æ·»åŠ èšç±»ç»“æœç‚¹äº‘
+	viewer->addPointCloud<pcl::PointXYZRGB>(all_cloud, "clustered_cloud", v2);
+	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "clustered_cloud", v2);
+
+	// æ·»åŠ æ–‡æœ¬è¯´æ˜
+	viewer->addText("K-means++ Clustering Results", 10, 20, 16, 1, 1, 1, "clustered_text", v2);
+	std::string cluster_count = "Clusters: " + std::to_string(cluster_indices.size());
+	viewer->addText(cluster_count, 10, 40, 14, 1, 1, 1, "cluster_count", v2);
+
+	// æ·»åŠ å‚æ•°ä¿¡æ¯
+	std::string params_info = "Clusters: " + std::to_string(clusterNum) + ", MaxIter: " + std::to_string(maxIter);
+	viewer->addText(params_info, 10, 60, 14, 1, 1, 1, "params_info", v2);
+
+	std::string time_info = "Time: " + std::to_string(time.getTimeSeconds()) + "s";
+	viewer->addText(time_info, 10, 80, 14, 1, 1, 1, "time_info", v2);
+
+	// å…¬å…±è®¾ç½®
+
+	// æ·»åŠ æ ‡é¢˜
+	viewer->addText("K-means++ Clustering (7 Clusters)", 250, 20, 18, 1, 1, 1, "title");
+
+	// æ·»åŠ åæ ‡ç³»
+	viewer->addCoordinateSystem(1.0, "axis_v1", v1);
+	viewer->addCoordinateSystem(1.0, "axis_v2", v2);
+
+	// è®¾ç½®ç›¸æœºå‚æ•°
+	viewer->initCameraParameters();
+	viewer->setCameraPosition(0, 0, 10, 0, 0, 0, 0, 1, 0);
+
+	cout << "\n=== Visualization Started ===" << endl;
+	cout << "Left: Original point cloud (White)" << endl;
+	cout << "Right: K-means++ clustering results (7 colored clusters)" << endl;
+	cout << "Parameters: Clusters=" << clusterNum << ", MaxIterations=" << maxIter << endl;
+	cout << "Press 'q' to exit" << endl;
+	cout << "Use mouse to rotate and scroll to zoom" << endl;
+
+	// ä¸»å¾ªç¯
+	while (!viewer->wasStopped())
+	{
+		viewer->spinOnce(100);
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 	}
+
 	return 0;
 }
-

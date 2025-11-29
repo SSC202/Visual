@@ -1,59 +1,163 @@
 #include "Kmeans.h"
 #include <pcl/io/pcd_io.h>
 #include <pcl/common/time.h>
-
-using namespace std;
+#include <pcl/visualization/pcl_visualizer.h>
+#include <iostream>
+#include <vector>
+#include <thread>
+#include <chrono>
 
 int main()
 {
-	// ¼ÓÔØµãÔÆ
+	// è¯»å–ç‚¹äº‘æ•°æ®
+	std::cout << "=== Loading Point Cloud ===" << std::endl;
 	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+
 	if (pcl::io::loadPCDFile<pcl::PointXYZ>("test.pcd", *cloud) == -1)
 	{
-		PCL_ERROR("¶ÁÈ¡Ô´±êµãÔÆÊ§°Ü \n");
-		return (-1);
+		std::cerr << "Could not read point cloud file!" << std::endl;
+		return -1;
 	}
-	cout << "´ÓµãÔÆÖĞ¶ÁÈ¡ " << cloud->size() << " ¸öµã" << endl;
+	std::cout << "Loaded " << cloud->size() << " points from point cloud" << std::endl;
 
-	// K¾ùÖµ¾ÛÀà
-	pcl::StopWatch time;
-	int clusterNum = 8; // ¾ÛÀà¸öÊı
-	int maxIter = 50;   // ×î´óµü´ú´ÎÊı
+	// K-means èšç±»
+	std::cout << "\n=== Performing K-means Clustering ===" << std::endl;
+
+	pcl::StopWatch timer;
+	int clusterNum = 8; // èšç±»æ•°é‡
+	int maxIter = 50;	// æœ€å¤§è¿­ä»£æ¬¡æ•°
+
 	KMeans kmeans(clusterNum, maxIter);
 	std::vector<pcl::Indices> cluster_indices;
+
 	kmeans.extract(cloud, cluster_indices);
-	cout << "¾ÛÀàµÄ¸öÊıÎª£º" << cluster_indices.size() << endl;
-	cout << "´úÂëÔËĞĞÊ±¼ä:" << time.getTimeSeconds() << "Ãë" << endl;
 
-	// ¾ÛÀà½á¹û·ÖÀà±£´æ
-	int begin = 1;
-	pcl::PointCloud<pcl::PointXYZRGB>::Ptr dbscan_all_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
-	for (auto it = cluster_indices.begin(); it != cluster_indices.end(); ++it)
+	std::cout << "Found " << cluster_indices.size() << " clusters" << std::endl;
+	std::cout << "Execution time: " << timer.getTimeSeconds() << " seconds" << std::endl;
+
+	// å¤„ç†å¹¶ä¿å­˜èšç±»ç»“æœ
+	std::cout << "\n=== Processing and Saving Clustering Results ===" << std::endl;
+
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+
+	// é¢„å®šä¹‰é¢œè‰²è¡¨
+	std::vector<std::vector<uint8_t>> colors = {
+		{255, 0, 0},   // çº¢è‰²
+		{0, 255, 0},   // ç»¿è‰²
+		{0, 0, 255},   // è“è‰²
+		{255, 255, 0}, // é»„è‰²
+		{255, 0, 255}, // ç´«è‰²
+		{0, 255, 255}, // é’è‰²
+		{255, 128, 0}, // æ©™è‰²
+		{128, 0, 255}, // ç´«ç½—å…°è‰²
+		{128, 255, 0}, // é»„ç»¿è‰²
+		{0, 128, 255}  // å¤©è“è‰²
+	};
+
+	int cluster_id = 1;
+	for (const auto &cluster : cluster_indices)
 	{
-		// »ñÈ¡Ã¿Ò»¸ö¾ÛÀàµãÔÆÍÅµÄµã
-		pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_dbscan(new pcl::PointCloud<pcl::PointXYZRGB>);
-		// Í¬Ò»µãÔÆÍÅ¸³ÉÏÍ¬Ò»ÖÖÑÕÉ«
-		uint8_t R = rand() % (256) + 0;
-		uint8_t G = rand() % (256) + 0;
-		uint8_t B = rand() % (256) + 0;
+		pcl::PointCloud<pcl::PointXYZRGB>::Ptr cluster_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
 
-		for (auto pit = it->begin(); pit != it->end(); ++pit)
+		// ä¸ºæ¯ä¸ªèšç±»åˆ†é…é¢œè‰²
+		std::vector<uint8_t> color = colors[(cluster_id - 1) % colors.size()];
+
+		// ç”¨å½©è‰²ç‚¹å¡«å……èšç±»ç‚¹äº‘
+		for (const auto &point_index : cluster)
 		{
-			pcl::PointXYZRGB point_db;
-			point_db.x = cloud->points[*pit].x;
-			point_db.y = cloud->points[*pit].y;
-			point_db.z = cloud->points[*pit].z;
-			point_db.r = R;
-			point_db.g = G;
-			point_db.b = B;
-			cloud_dbscan->points.push_back(point_db);
+			pcl::PointXYZRGB colored_point;
+			colored_point.x = cloud->points[point_index].x;
+			colored_point.y = cloud->points[point_index].y;
+			colored_point.z = cloud->points[point_index].z;
+			colored_point.r = color[0];
+			colored_point.g = color[1];
+			colored_point.b = color[2];
+			cluster_cloud->points.push_back(colored_point);
 		}
-		// ¾ÛÀà½á¹û·ÖÀà±£´æ
-		pcl::io::savePCDFileBinary("kmeans" + std::to_string(begin) + ".pcd", *cloud_dbscan);
-		begin++;
 
+		cluster_cloud->width = cluster_cloud->points.size();
+		cluster_cloud->height = 1;
+		cluster_cloud->is_dense = true;
+
+		std::cout << "Cluster " << cluster_id << ": " << cluster_cloud->points.size() << " points" << std::endl;
+
+		// ä¿å­˜å•ä¸ªèšç±»
+		std::string filename = "kmeans_cluster_" + std::to_string(cluster_id) + ".pcd";
+		pcl::io::savePCDFileASCII(filename, *cluster_cloud);
+
+		// åˆå¹¶åˆ°å½©è‰²ç‚¹äº‘ç”¨äºå¯è§†åŒ–
+		*colored_cloud += *cluster_cloud;
+		cluster_id++;
+	}
+
+	// å¯è§†åŒ–
+
+	// åˆ›å»ºå¯è§†åŒ–å™¨
+	pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer("K-means Clustering Results"));
+	viewer->setBackgroundColor(0.05, 0.05, 0.15); // æ·±è“è‰²èƒŒæ™¯
+
+	// å·¦ä¾§è§†å£ - åŸå§‹ç‚¹äº‘
+	int v1(0);
+	viewer->createViewPort(0.0, 0.0, 0.5, 1.0, v1);
+	viewer->setBackgroundColor(0.1, 0.1, 0.2, v1);
+
+	// æ·»åŠ åŸå§‹ç‚¹äº‘ï¼ˆç™½è‰²ï¼‰
+	pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> cloud_white(cloud, 255, 255, 255);
+	viewer->addPointCloud<pcl::PointXYZ>(cloud, cloud_white, "original_cloud", v1);
+	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "original_cloud", v1);
+
+	// æ·»åŠ æ–‡æœ¬è¯´æ˜
+	viewer->addText("Original Point Cloud", 10, 20, 16, 1, 1, 1, "original_text", v1);
+	std::string original_count = "Points: " + std::to_string(cloud->size());
+	viewer->addText(original_count, 10, 40, 14, 1, 1, 1, "original_count", v1);
+
+	// å³ä¾§è§†å£ - èšç±»ç»“æœ
+	int v2(0);
+	viewer->createViewPort(0.5, 0.0, 1.0, 1.0, v2);
+	viewer->setBackgroundColor(0.1, 0.15, 0.1, v2);
+
+	// æ·»åŠ èšç±»ç»“æœç‚¹äº‘
+	viewer->addPointCloud<pcl::PointXYZRGB>(colored_cloud, "clustered_cloud", v2);
+	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "clustered_cloud", v2);
+
+	// æ·»åŠ æ–‡æœ¬è¯´æ˜
+	viewer->addText("K-means Clustering Results", 10, 20, 16, 1, 1, 1, "clustered_text", v2);
+	std::string cluster_count = "Clusters: " + std::to_string(cluster_indices.size());
+	viewer->addText(cluster_count, 10, 40, 14, 1, 1, 1, "cluster_count", v2);
+
+	// æ·»åŠ å‚æ•°ä¿¡æ¯
+	std::string params_info = "Clusters: " + std::to_string(clusterNum) + ", MaxIter: " + std::to_string(maxIter);
+	viewer->addText(params_info, 10, 60, 14, 1, 1, 1, "params_info", v2);
+
+	std::string time_info = "Time: " + std::to_string(timer.getTimeSeconds()) + "s";
+	viewer->addText(time_info, 10, 80, 14, 1, 1, 1, "time_info", v2);
+
+	// å…¬å…±è®¾ç½®
+
+	// æ·»åŠ æ ‡é¢˜
+	viewer->addText("K-means Clustering", 300, 20, 18, 1, 1, 1, "title");
+
+	// æ·»åŠ åæ ‡ç³»
+	viewer->addCoordinateSystem(1.0, "axis_v1", v1);
+	viewer->addCoordinateSystem(1.0, "axis_v2", v2);
+
+	// è®¾ç½®ç›¸æœºå‚æ•°
+	viewer->initCameraParameters();
+	viewer->setCameraPosition(0, 0, 10, 0, 0, 0, 0, 1, 0);
+
+	std::cout << "\n=== Visualization Started ===" << std::endl;
+	std::cout << "Left: Original point cloud (White)" << std::endl;
+	std::cout << "Right: K-means clustering results (Colored clusters)" << std::endl;
+	std::cout << "Parameters: Clusters=" << clusterNum << ", MaxIterations=" << maxIter << std::endl;
+	std::cout << "Press 'q' to exit" << std::endl;
+	std::cout << "Use mouse to rotate and scroll to zoom" << std::endl;
+
+	// ä¸»å¾ªç¯
+	while (!viewer->wasStopped())
+	{
+		viewer->spinOnce(100);
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 	}
 
 	return 0;
 }
-

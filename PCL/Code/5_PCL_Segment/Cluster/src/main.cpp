@@ -1,8 +1,8 @@
-#include <pcl/ModelCoefficients.h>
+#include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/io/pcd_io.h>
-#include <pcl/filters/extract_indices.h>
 #include <pcl/filters/voxel_grid.h>
+#include <pcl/filters/extract_indices.h>
 #include <pcl/features/normal_3d.h>
 #include <pcl/kdtree/kdtree.h>
 #include <pcl/sample_consensus/method_types.h>
@@ -10,131 +10,223 @@
 #include <pcl/segmentation/sac_segmentation.h>
 #include <pcl/segmentation/extract_clusters.h>
 #include <pcl/visualization/pcl_visualizer.h>
+#include <iostream>
+#include <thread>
+#include <chrono>
+#include <vector>
+#include <string>
+#include <random>
 
-int main(int argc, char** argv) {
-    // Read in the cloud data
-    pcl::PCDReader reader;
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>), cloud_f(
-        new pcl::PointCloud<pcl::PointXYZ>);
-    reader.read("test.pcd", *cloud);
-    std::cout << "PointCloud before filtering has: " << cloud->points.size() << " data points." << std::endl; //*
+int main(int argc, char **argv)
+{
+    // è¯»å–ç‚¹äº‘æ•°æ®
+    std::cout << "=== Loading Point Cloud ===" << std::endl;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
 
-    // Create the filtering object: downsample the dataset using a leaf size of 1cm
-    // Ö´ĞĞ½µ²ÉÑùÂË²¨£¬Ò¶×Ó´óĞ¡1cm
-    pcl::VoxelGrid<pcl::PointXYZ> vg;
+    if (pcl::io::loadPCDFile<pcl::PointXYZ>("test.pcd", *cloud) == -1)
+    {
+        PCL_ERROR("Could not read point cloud file!\n");
+        return -1;
+    }
+    std::cout << "Original point cloud: " << cloud->points.size() << " data points" << std::endl;
+
+    // ä½“ç´ ç½‘æ ¼ä¸‹é‡‡æ ·
+    std::cout << "\n=== Performing Voxel Grid Downsampling ===" << std::endl;
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZ>);
-    vg.setInputCloud(cloud);
-    vg.setLeafSize(0.01f, 0.01f, 0.01f);
-    vg.filter(*cloud_filtered);
-    std::cout << "PointCloud after filtering has: " << cloud_filtered->points.size() << " data points."
-        << std::endl; //*
 
-    // Create the segmentation object for the planar model and set all the parameters
-    // ´´½¨Æ½ÃæÄ£ĞÍ·Ö¸îÆ÷²¢³õÊ¼»¯²ÎÊı
+    pcl::VoxelGrid<pcl::PointXYZ> vg;
+    vg.setInputCloud(cloud);
+    vg.setLeafSize(0.01f, 0.01f, 0.01f); // 1cm ä½“ç´ å°ºå¯¸
+    vg.filter(*cloud_filtered);
+
+    std::cout << "Downsampled point cloud: " << cloud_filtered->points.size() << " data points" << std::endl;
+    std::cout << "Reduction ratio: "
+              << (1.0 - static_cast<float>(cloud_filtered->size()) / cloud->size()) * 100
+              << "%" << std::endl;
+
+    // å¹³é¢åˆ†å‰²
+    std::cout << "\n=== Performing Plane Segmentation ===" << std::endl;
+
     pcl::SACSegmentation<pcl::PointXYZ> seg;
     pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
     pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_plane(new pcl::PointCloud<pcl::PointXYZ>());
-    pcl::PCDWriter writer;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_f(new pcl::PointCloud<pcl::PointXYZ>);
+
+    // è®¾ç½®åˆ†å‰²å‚æ•°
     seg.setOptimizeCoefficients(true);
     seg.setModelType(pcl::SACMODEL_PLANE);
     seg.setMethodType(pcl::SAC_RANSAC);
     seg.setMaxIterations(100);
     seg.setDistanceThreshold(0.02);
 
-    int i = 0, nr_points = (int)cloud_filtered->points.size();
-    while (cloud_filtered->points.size() > 0.3 * nr_points) {
-        // Segment the largest planar component from the remaining cloud
-        // ÒÆ³ıÊ£ÓàµãÔÆÖĞ×î´óµÄÆ½Ãæ
+    int i = 0;
+    int nr_points = static_cast<int>(cloud_filtered->points.size());
+
+    // è¿­ä»£ç§»é™¤å¹³é¢ï¼Œç›´åˆ°å‰©ä½™ç‚¹äº‘å°äºåŸå§‹ç‚¹äº‘çš„30%
+    while (cloud_filtered->points.size() > 0.3 * nr_points)
+    {
+        std::cout << "-> Segmenting plane " << i + 1 << std::endl;
+
         seg.setInputCloud(cloud_filtered);
-        // Ö´ĞĞ·Ö¸î£¬½«·Ö¸î³öÀ´µÄÆ½ÃæµãÔÆË÷Òı±£´æµ½inliersÖĞ
         seg.segment(*inliers, *coefficients);
-        if (inliers->indices.size() == 0) {
+
+        if (inliers->indices.size() == 0)
+        {
             std::cout << "Could not estimate a planar model for the given dataset." << std::endl;
             break;
         }
 
-        // Extract the planar inliers from the input cloud
-        // ´ÓÊäÈëµãÔÆÖĞÈ¡³öÆ½ÃæÄÚµã
+        // æå–å¹³é¢å†…ç‚¹
         pcl::ExtractIndices<pcl::PointXYZ> extract;
         extract.setInputCloud(cloud_filtered);
         extract.setIndices(inliers);
         extract.setNegative(false);
-
-        // Get the points associated with the planar surface
-        // µÃµ½ÓëÆ½ÃæÏà¹ØµÄµãcloud_plane
         extract.filter(*cloud_plane);
-        std::cout << "PointCloud representing the planar component: " << cloud_plane->points.size() << " data points."
-            << std::endl;
 
-        // Remove the planar inliers, extract the rest
-        // ´ÓµãÔÆÖĞÌŞ³ıÕâĞ©Æ½ÃæÄÚµã£¬ÌáÈ¡³öÊ£ÏÂµÄµã±£´æµ½cloud_fÖĞ£¬²¢ÖØĞÂ¸³Öµ¸øcloud_filtered¡£
+        std::cout << "  Planar component " << i + 1 << ": " << cloud_plane->points.size() << " data points" << std::endl;
+
+        // ç§»é™¤å¹³é¢å†…ç‚¹ï¼Œä¿ç•™å‰©ä½™ç‚¹äº‘
         extract.setNegative(true);
         extract.filter(*cloud_f);
         *cloud_filtered = *cloud_f;
+
+        i++;
     }
 
-    // Creating the KdTree object for the search method of the extraction
-    // ÎªÌáÈ¡Ëã·¨µÄËÑË÷·½·¨´´½¨Ò»¸öKdTree¶ÔÏó
+    std::cout << "Remaining non-planar points: " << cloud_filtered->points.size() << std::endl;
+
+    // æ¬§å‡ é‡Œå¾—èšç±»
+    std::cout << "\n=== Performing Euclidean Clustering ===" << std::endl;
+
     pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
     tree->setInputCloud(cloud_filtered);
 
-    /**
-     * ÔÚÕâÀï£¬ÎÒÃÇ´´½¨Ò»¸öPointIndicesµÄvector£¬¸ÃvectorÔÚvector <int>ÖĞ°üº¬Êµ¼ÊµÄË÷ÒıĞÅÏ¢¡£
-     * Ã¿¸ö¼ì²âµ½µÄ´ØµÄË÷Òı¶¼±£´æÔÚÕâÀï-Çë×¢Òâ£¬cluster_indicesÊÇÒ»¸övector£¬°üº¬¶à¸ö¼ì²âµ½µÄ´ØµÄPointIndicesµÄÊµÀı¡£
-     * Òò´Ë£¬cluster_indices[0]°üº¬ÎÒÃÇµãÔÆÖĞµÚÒ»¸ö cluster(´Ø)µÄËùÓĞË÷Òı¡£
-     *
-     * ´ÓµãÔÆÖĞÌáÈ¡´Ø£¨¼¯Èº£©,²¢½«µãÔÆË÷Òı±£´æÔÚ cluster_indices ÖĞ¡£
-     */
     std::vector<pcl::PointIndices> cluster_indices;
     pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
-    ec.setClusterTolerance(0.02);               // ÉèÖÃÁÙ½üËÑË÷µÄËÑË÷°ë¾¶£¨ËÑË÷Èİ²î£©Îª2cm
-    ec.setMinClusterSize(100);                  // Ã¿¸ö´Ø£¨¼¯Èº£©µÄ×îĞ¡´óĞ¡
-    ec.setMaxClusterSize(25000);                // Ã¿¸ö´Ø£¨¼¯Èº£©µÄ×î´ó´óĞ¡
-    ec.setSearchMethod(tree);                   // ÉèÖÃµãÔÆËÑË÷Ëã·¨
-    ec.setInputCloud(cloud_filtered);           // ÉèÖÃÊäÈëµãÔÆ
-    ec.extract(cluster_indices);                // ÉèÖÃÌáÈ¡µ½µÄ´Ø£¬½«Ã¿¸ö´ØÒÔË÷ÒıµÄĞÎÊ½±£´æµ½cluster_indices;
 
-    pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer("3D Viewer"));
+    ec.setClusterTolerance(0.02); // 2cm èšç±»å®¹å·®
+    ec.setMinClusterSize(100);    // æœ€å°èšç±»ç‚¹æ•°
+    ec.setMaxClusterSize(25000);  // æœ€å¤§èšç±»ç‚¹æ•°
+    ec.setSearchMethod(tree);
+    ec.setInputCloud(cloud_filtered);
+    ec.extract(cluster_indices);
 
-    // ÎªÁË´ÓµãÔÆË÷ÒıÏòÁ¿ÖĞ·Ö¸î³öÃ¿¸ö´Ø£¬±ØĞëµü´ú·ÃÎÊµãÔÆË÷Òı£¬
+    std::cout << "Found " << cluster_indices.size() << " clusters" << std::endl;
+
+    // å¯è§†åŒ–
+
+    // åˆ›å»ºå¯è§†åŒ–å™¨
+    pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer("Point Cloud Segmentation and Clustering"));
+    viewer->setBackgroundColor(0.05, 0.05, 0.15); // æ·±è“è‰²èƒŒæ™¯
+
+    // å·¦ä¾§è§†å£ - åŸå§‹ç‚¹äº‘
+    int v1(0);
+    viewer->createViewPort(0.0, 0.0, 0.33, 1.0, v1);
+    viewer->setBackgroundColor(0.1, 0.1, 0.2, v1);
+
+    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> cloud_white(cloud, 255, 255, 255);
+    viewer->addPointCloud<pcl::PointXYZ>(cloud, cloud_white, "original_cloud", v1);
+    viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 1, "original_cloud", v1);
+
+    viewer->addText("Original Point Cloud", 10, 20, 14, 1, 1, 1, "original_text", v1);
+    std::string original_count = "Points: " + std::to_string(cloud->size());
+    viewer->addText(original_count, 10, 40, 12, 1, 1, 1, "original_count", v1);
+
+    // ä¸­é—´è§†å£ - ä¸‹é‡‡æ ·å’Œå¹³é¢ç§»é™¤åç‚¹äº‘
+    int v2(0);
+    viewer->createViewPort(0.33, 0.0, 0.66, 1.0, v2);
+    viewer->setBackgroundColor(0.1, 0.15, 0.1, v2);
+
+    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> filtered_yellow(cloud_filtered, 255, 255, 0);
+    viewer->addPointCloud<pcl::PointXYZ>(cloud_filtered, filtered_yellow, "filtered_cloud", v2);
+    viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "filtered_cloud", v2);
+
+    viewer->addText("After Downsampling & Plane Removal", 10, 20, 14, 1, 1, 1, "filtered_text", v2);
+    std::string filtered_count = "Points: " + std::to_string(cloud_filtered->size());
+    viewer->addText(filtered_count, 10, 40, 12, 1, 1, 1, "filtered_count", v2);
+    std::string planes_removed = "Planes removed: " + std::to_string(i);
+    viewer->addText(planes_removed, 10, 60, 12, 1, 1, 1, "planes_info", v2);
+
+    // å³ä¾§è§†å£ - èšç±»ç»“æœ
+    int v3(0);
+    viewer->createViewPort(0.66, 0.0, 1.0, 1.0, v3);
+    viewer->setBackgroundColor(0.15, 0.1, 0.1, v3);
+
+    // ä¸ºæ¯ä¸ªèšç±»æ·»åŠ ä¸åŒé¢œè‰²çš„ç‚¹äº‘
+    std::vector<pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ>> color_handlers;
+    std::vector<std::vector<uint8_t>> colors = {
+        {255, 0, 0},
+        {0, 255, 0},
+        {0, 0, 255},
+        {255, 255, 0},
+        {255, 0, 255},
+        {0, 255, 255},
+        {255, 128, 0},
+        {128, 0, 255}};
+
     int j = 0;
     for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin();
-        it != cluster_indices.end(); ++it) {
-
-        // Ã¿´Î´´½¨Ò»¸öĞÂµÄµãÔÆÊı¾İ¼¯£¬²¢ÇÒ½«ËùÓĞµ±Ç°´ØµÄµãĞ´Èëµ½µãÔÆÊı¾İ¼¯ÖĞ¡£
+         it != cluster_indices.end(); ++it)
+    {
         pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_cluster(new pcl::PointCloud<pcl::PointXYZ>);
-        const std::vector<int>& indices = it->indices;
 
-        for (std::vector<int>::const_iterator pit = indices.begin(); pit != indices.end(); ++pit)
+        for (std::vector<int>::const_iterator pit = it->indices.begin(); pit != it->indices.end(); ++pit)
             cloud_cluster->points.push_back(cloud_filtered->points[*pit]);
 
         cloud_cluster->width = cloud_cluster->points.size();
         cloud_cluster->height = 1;
         cloud_cluster->is_dense = true;
 
-        std::cout << "PointCloud representing the Cluster: " << cloud_cluster->points.size() << " data points."
-            << std::endl;
-        /*
-            std::stringstream ss;
-            ss << "cloud_cluster_" << j << ".pcd";
-            writer.write<pcl::PointXYZ>(ss.str(), *cloud_cluster, false); //
-        */
-        std::stringstream ss;
-        ss << "cloud_cluster_" << j;
-        // Generate a random (bright) color
-        pcl::visualization::PointCloudColorHandlerRandom<pcl::PointXYZ> single_color(cloud_cluster);
-        viewer->addPointCloud<pcl::PointXYZ>(cloud_cluster, single_color, ss.str());
-        viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, ss.str());
+        std::cout << "Cluster " << j << ": " << cloud_cluster->points.size() << " data points" << std::endl;
+
+        // ä¸ºèšç±»åˆ†é…é¢œè‰²
+        std::vector<uint8_t> color = colors[j % colors.size()];
+        pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> cluster_color(
+            cloud_cluster, color[0], color[1], color[2]);
+
+        std::string cluster_id = "cluster_" + std::to_string(j);
+        viewer->addPointCloud<pcl::PointXYZ>(cloud_cluster, cluster_color, cluster_id, v3);
+        viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, cluster_id, v3);
 
         j++;
     }
-    std::cout << "cloud size: " << cluster_indices.size() << std::endl;
 
-    viewer->addCoordinateSystem(0.5);
-    while (!viewer->wasStopped()) {
-        viewer->spinOnce();
+    viewer->addText("Clustering Results", 10, 20, 14, 1, 1, 1, "clusters_text", v3);
+    std::string clusters_count = "Clusters: " + std::to_string(cluster_indices.size());
+    viewer->addText(clusters_count, 10, 40, 12, 1, 1, 1, "clusters_count", v3);
+
+    // å…¬å…±è®¾ç½®
+
+    // æ·»åŠ æ ‡é¢˜
+    viewer->addText("Point Cloud Segmentation and Clustering", 400, 20, 16, 1, 1, 1, "title");
+
+    // æ·»åŠ åæ ‡è½´
+    viewer->addCoordinateSystem(0.5, "axis_v1", v1);
+    viewer->addCoordinateSystem(0.5, "axis_v2", v2);
+    viewer->addCoordinateSystem(0.5, "axis_v3", v3);
+
+    // è®¾ç½®ç›¸æœºå‚æ•°
+    viewer->initCameraParameters();
+    viewer->setCameraPosition(0, 0, 5, 0, 0, 0, 0, 1, 0);
+
+    // æ·»åŠ å‚æ•°ä¿¡æ¯
+    std::string params_text = "Parameters: Voxel=0.01, PlaneDistThresh=0.02, ClusterTol=0.02";
+    viewer->addText(params_text, 10, 450, 12, 1, 1, 1, "params_text");
+
+    std::cout << "\n=== Visualization Started ===" << std::endl;
+    std::cout << "Left: Original point cloud (White)" << std::endl;
+    std::cout << "Middle: After downsampling & plane removal (Yellow)" << std::endl;
+    std::cout << "Right: Clustering results (Colored clusters)" << std::endl;
+    std::cout << "Press 'q' to exit" << std::endl;
+    std::cout << "Use mouse to rotate and scroll to zoom" << std::endl;
+
+    // ä¸»å¾ªç¯
+    while (!viewer->wasStopped())
+    {
+        viewer->spinOnce(100);
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
-    return (0);
+    return 0;
 }

@@ -1,115 +1,233 @@
 #include <pcl/point_cloud.h>
-#include <pcl/octree/octree_search.h>           // OcTreeÏà¹Ø¶¨Òå
-#include <pcl/visualization/cloud_viewer.h>     // ¿ÉÊÓ»¯
-
+#include <pcl/point_types.h>
+#include <pcl/octree/octree_search.h>
+#include <pcl/visualization/pcl_visualizer.h>
+#include <pcl/common/colors.h>
 #include <iostream>
+#include <thread>
+#include <chrono>
 #include <vector>
-#include <ctime>
+#include <string>
 
-
-int main(int argc, char** argv) {
-
-    // ³õÊ¼»¯Ëæ»úÊıÖÖ×Ó
-    srand((unsigned int)time(NULL));
-
-    // Ëæ»ú»¯´´½¨µãÔÆ
+int main()
+{
+    // åˆ›å»ºç‚¹äº‘æ•°æ® 
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
     cloud->width = 1000;
     cloud->height = 1;
     cloud->points.resize(cloud->width * cloud->height);
-    for (size_t i = 0; i < cloud->points.size(); ++i) {
+
+    // ç”Ÿæˆéšæœºç‚¹äº‘ï¼Œé›†ä¸­åœ¨ä¸­å¿ƒåŒºåŸŸ
+    for (size_t i = 0; i < cloud->points.size(); ++i)
+    {
         cloud->points[i].x = 1024.0f * rand() / (RAND_MAX + 1.0f);
         cloud->points[i].y = 1024.0f * rand() / (RAND_MAX + 1.0f);
         cloud->points[i].z = 1024.0f * rand() / (RAND_MAX + 1.0f);
     }
 
-
-    // resolution²ÎÊıÃèÊöÁËoctreeÒ¶×Óleaf½ÚµãµÄ×îĞ¡ÌåËØ³ß´ç
-    float resolution = 128.0f;
-    
-    // ´´½¨ OcTree ¶ÔÏó
+    // åˆ›å»ºå…«å‰æ ‘
+    float resolution = 64.0f; // å…«å‰æ ‘ä½“ç´ åˆ†è¾¨ç‡
     pcl::octree::OctreePointCloudSearch<pcl::PointXYZ> octree(resolution);
 
-    // ÉèÖÃÊäÈëµãÔÆ
-    octree.setInputCloud(cloud);
+    std::cout << "=== Building Octree ===" << std::endl;
+    std::cout << "Resolution: " << resolution << std::endl;
 
-    // Í¨¹ıµãÔÆ¹¹½¨octree
+    octree.setInputCloud(cloud);
     octree.addPointsFromInputCloud();
 
-    // ´´½¨ËÑË÷µã
+    std::cout << "Octree depth: " << octree.getTreeDepth() << std::endl;
+    std::cout << "Leaf count: " << octree.getLeafCount() << std::endl;
+
+    // è®¾ç½®æŸ¥è¯¢ç‚¹
     pcl::PointXYZ searchPoint;
-    searchPoint.x = 1024.0f * rand() / (RAND_MAX + 1.0f);
-    searchPoint.y = 1024.0f * rand() / (RAND_MAX + 1.0f);
-    searchPoint.z = 1024.0f * rand() / (RAND_MAX + 1.0f);
+    searchPoint.x = 512.0f;
+    searchPoint.y = 512.0f;
+    searchPoint.z = 512.0f;
 
-    // ÌåËØ½üÁÚËÑË÷
-    std::vector<int> pointIdxVec;
+    /**
+     * @brief   KNN æœç´¢
+     */
+    int k = 10;
+    std::vector<int> point_idx_knn_search;
+    std::vector<float> point_knn_squared_distance;
 
-    if (octree.voxelSearch(searchPoint, pointIdxVec)) {
-        std::cout << "Neighbors within voxel search at (" << searchPoint.x
-            << " " << searchPoint.y
-            << " " << searchPoint.z << ")"
-            << std::endl;
+    std::cout << "\n=== Octree KNN Search ===" << std::endl;
+    std::cout << "Search point: (" << searchPoint.x << ", " << searchPoint.y << ", " << searchPoint.z << ")" << std::endl;
+    std::cout << "K = " << k << std::endl;
 
-        for (size_t i = 0; i < pointIdxVec.size(); ++i)
-            std::cout << "    " << cloud->points[pointIdxVec[i]].x
-            << " " << cloud->points[pointIdxVec[i]].y
-            << " " << cloud->points[pointIdxVec[i]].z << std::endl;
+    if (octree.nearestKSearch(searchPoint, k, point_idx_knn_search, point_knn_squared_distance) > 0)
+    {
+        std::cout << "Found " << point_idx_knn_search.size() << " nearest neighbors:" << std::endl;
+        for (size_t i = 0; i < point_idx_knn_search.size(); ++i)
+        {
+            std::cout << "  Point " << i + 1 << ": ("
+                      << cloud->points[point_idx_knn_search[i]].x << ", "
+                      << cloud->points[point_idx_knn_search[i]].y << ", "
+                      << cloud->points[point_idx_knn_search[i]].z
+                      << ") - distance: " << sqrt(point_knn_squared_distance[i]) << std::endl;
+        }
     }
 
-    // KNN
-    int K = 10;
+    /**
+     * @brief   åŠå¾„æœç´¢
+     */
+    float radius = 200.0f;
+    std::vector<int> point_idx_radius_search;
+    std::vector<float> point_radius_squared_distance;
 
-    std::vector<int> pointIdxNKNSearch;
-    std::vector<float> pointNKNSquaredDistance;
+    std::cout << "\n=== Octree Radius Search ===" << std::endl;
+    std::cout << "Search radius: " << radius << std::endl;
 
-    std::cout << "K nearest neighbor search at (" << searchPoint.x
-        << " " << searchPoint.y
-        << " " << searchPoint.z
-        << ") with K=" << K << std::endl;
+    if (octree.radiusSearch(searchPoint, radius, point_idx_radius_search, point_radius_squared_distance) > 0)
+    {
+        std::cout << "Found " << point_idx_radius_search.size() << " points within radius " << radius << std::endl;
 
-    if (octree.nearestKSearch(searchPoint, K, pointIdxNKNSearch, pointNKNSquaredDistance) > 0) {
-        for (size_t i = 0; i < pointIdxNKNSearch.size(); ++i)
-            std::cout << "    " << cloud->points[pointIdxNKNSearch[i]].x
-            << " " << cloud->points[pointIdxNKNSearch[i]].y
-            << " " << cloud->points[pointIdxNKNSearch[i]].z
-            << " (squared distance: " << pointNKNSquaredDistance[i] << ")" << std::endl;
+        int display_count = std::min(5, (int)point_idx_radius_search.size());
+        for (int i = 0; i < display_count; ++i)
+        {
+            std::cout << "  Point " << i + 1 << ": ("
+                      << cloud->points[point_idx_radius_search[i]].x << ", "
+                      << cloud->points[point_idx_radius_search[i]].y << ", "
+                      << cloud->points[point_idx_radius_search[i]].z
+                      << ") - distance: " << sqrt(point_radius_squared_distance[i]) << std::endl;
+        }
+        if (point_idx_radius_search.size() > 5)
+        {
+            std::cout << "  ... and " << point_idx_radius_search.size() - 5 << " more points" << std::endl;
+        }
     }
 
-    // °ë¾¶ËÑË÷
-    std::vector<int> pointIdxRadiusSearch;
-    std::vector<float> pointRadiusSquaredDistance;
+    /**
+     * @brief   ä½“ç´ æœç´¢
+     */
+    std::cout << "\n=== Octree Voxel Search ===" << std::endl;
+    std::vector<int> point_idx_voxel_search;
 
-    float radius = 256.0f * rand() / (RAND_MAX + 1.0f);
-
-    std::cout << "Neighbors within radius search at (" << searchPoint.x
-        << " " << searchPoint.y
-        << " " << searchPoint.z
-        << ") with radius=" << radius << std::endl;
-
-
-    if (octree.radiusSearch(searchPoint, radius, pointIdxRadiusSearch, pointRadiusSquaredDistance) > 0) {
-        for (size_t i = 0; i < pointIdxRadiusSearch.size(); ++i)
-            std::cout << "    " << cloud->points[pointIdxRadiusSearch[i]].x
-            << " " << cloud->points[pointIdxRadiusSearch[i]].y
-            << " " << cloud->points[pointIdxRadiusSearch[i]].z
-            << " (squared distance: " << pointRadiusSquaredDistance[i] << ")" << std::endl;
+    if (octree.voxelSearch(searchPoint, point_idx_voxel_search))
+    {
+        std::cout << "Found " << point_idx_voxel_search.size() << " points in the same voxel:" << std::endl;
+        for (size_t i = 0; i < point_idx_voxel_search.size(); ++i)
+        {
+            std::cout << "  Point " << i + 1 << ": ("
+                      << cloud->points[point_idx_voxel_search[i]].x << ", "
+                      << cloud->points[point_idx_voxel_search[i]].y << ", "
+                      << cloud->points[point_idx_voxel_search[i]].z << ")" << std::endl;
+        }
     }
 
-    // ¿ÉÊÓ»¯
-    pcl::visualization::PCLVisualizer viewer("PCL Viewer");
-    viewer.setBackgroundColor(0.0, 0.0, 0.5);
-    viewer.addPointCloud<pcl::PointXYZ>(cloud, "cloud");
+    /**
+     * @brief   å¯è§†åŒ–
+     */
 
-    pcl::PointXYZ originPoint(0.0, 0.0, 0.0);
-    // Ìí¼Ó´ÓÔ­µãµ½ËÑË÷µãµÄÏß¶Î
-    viewer.addLine(originPoint, searchPoint);
-    // Ìí¼ÓÒ»¸öÒÔËÑË÷µãÎªÔ²ĞÄ£¬ËÑË÷°ë¾¶Îª°ë¾¶µÄÇòÌå
-    viewer.addSphere(searchPoint, radius, "sphere", 0);
-    // Ìí¼ÓÒ»¸ö·Åµ½200±¶ºóµÄ×ø±êÏµ
-    viewer.addCoordinateSystem(200);
+    // åˆ›å»ºå¯è§†åŒ–å™¨
+    pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer("Octree Search Visualization"));
+    viewer->setBackgroundColor(0.05, 0.05, 0.15);
 
-    while (!viewer.wasStopped()) {
-        viewer.spinOnce();
+    // æ·»åŠ åŸå§‹ç‚¹äº‘
+    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> cloud_gray(cloud, 180, 180, 180);
+    viewer->addPointCloud<pcl::PointXYZ>(cloud, cloud_gray, "original_cloud");
+    viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "original_cloud");
+
+    // æ·»åŠ æŸ¥è¯¢ç‚¹
+    pcl::PointCloud<pcl::PointXYZ>::Ptr search_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    search_cloud->push_back(searchPoint);
+    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> search_red(search_cloud, 255, 0, 0);
+    viewer->addPointCloud<pcl::PointXYZ>(search_cloud, search_red, "search_point");
+    viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 20, "search_point");
+
+    // æ·»åŠ  KNN é‚»å±…ç‚¹
+    pcl::PointCloud<pcl::PointXYZ>::Ptr knn_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    for (size_t i = 0; i < point_idx_knn_search.size(); ++i)
+    {
+        knn_cloud->push_back(cloud->points[point_idx_knn_search[i]]);
     }
+    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> knn_green(knn_cloud, 0, 255, 0);
+    viewer->addPointCloud<pcl::PointXYZ>(knn_cloud, knn_green, "knn_points");
+    viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 8, "knn_points");
+
+    // æ·»åŠ åŠå¾„æœç´¢ç‚¹
+    pcl::PointCloud<pcl::PointXYZ>::Ptr radius_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    for (size_t i = 0; i < point_idx_radius_search.size(); ++i)
+    {
+        radius_cloud->push_back(cloud->points[point_idx_radius_search[i]]);
+    }
+    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> radius_blue(radius_cloud, 100, 150, 255);
+    viewer->addPointCloud<pcl::PointXYZ>(radius_cloud, radius_blue, "radius_points");
+    viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 6, "radius_points");
+
+    // æ·»åŠ ä½“ç´ å†…ç‚¹
+    pcl::PointCloud<pcl::PointXYZ>::Ptr voxel_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    for (size_t i = 0; i < point_idx_voxel_search.size(); ++i)
+    {
+        voxel_cloud->push_back(cloud->points[point_idx_voxel_search[i]]);
+    }
+    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> voxel_yellow(voxel_cloud, 255, 255, 0);
+    viewer->addPointCloud<pcl::PointXYZ>(voxel_cloud, voxel_yellow, "voxel_points");
+    viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 10, "voxel_points");
+
+    // æ·»åŠ æœç´¢åŠå¾„çƒä½“
+    viewer->addSphere(searchPoint, radius, 0.3, 0.3, 0.8, "radius_sphere");
+    viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_OPACITY, 0.15, "radius_sphere");
+
+    // æ·»åŠ å…«å‰æ ‘ä½“ç´ è¾¹ç•Œæ¡†
+    std::vector<pcl::PointXYZ, Eigen::aligned_allocator<pcl::PointXYZ>> voxel_centers;
+    octree.getOccupiedVoxelCenters(voxel_centers);
+
+    int voxel_count = 0;
+    for (const auto &center : voxel_centers)
+    {
+        // åªæ˜¾ç¤ºéƒ¨åˆ†ä½“ç´ é¿å…è¿‡äºå¯†é›†
+        if (voxel_count++ % 5 == 0)
+        {
+            std::string voxel_id = "voxel_" + std::to_string(voxel_count);
+            viewer->addCube(center.x - resolution / 2, center.x + resolution / 2,
+                            center.y - resolution / 2, center.y + resolution / 2,
+                            center.z - resolution / 2, center.z + resolution / 2,
+                            0.8, 0.8, 0.8, voxel_id);
+            viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_OPACITY, 0.1, voxel_id);
+            viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_REPRESENTATION,
+                                                pcl::visualization::PCL_VISUALIZER_REPRESENTATION_WIREFRAME, voxel_id);
+        }
+    }
+
+    // æ·»åŠ å›¾ä¾‹æ–‡æœ¬
+    viewer->addText("Octree Search Visualization", 10, 150, 18, 1, 1, 1, "title");
+    viewer->addText("Gray: Original point cloud", 10, 130, 14, 0.7, 0.7, 0.7, "original_text");
+    viewer->addText("Red: Search point", 10, 115, 14, 1, 0, 0, "search_text");
+    viewer->addText("Green: KNN neighbors (K=10)", 10, 100, 14, 0, 1, 0, "knn_text");
+    viewer->addText("Blue: Radius search points", 10, 85, 14, 0.4, 0.6, 1, "radius_text");
+    viewer->addText("Yellow: Same voxel points", 10, 70, 14, 1, 1, 0, "voxel_text");
+    viewer->addText("Wireframe cubes: Octree voxels", 10, 55, 14, 0.8, 0.8, 0.8, "voxel_structure_text");
+
+    // æ·»åŠ ç»Ÿè®¡ä¿¡æ¯
+    std::string stats_text = "Results: KNN=" + std::to_string(point_idx_knn_search.size()) +
+                             ", Radius=" + std::to_string(point_idx_radius_search.size()) +
+                             ", Voxel=" + std::to_string(point_idx_voxel_search.size());
+    viewer->addText(stats_text, 10, 170, 16, 1, 1, 1, "stats_text");
+
+    std::string octree_info = "Octree: Res=" + std::to_string(resolution) +
+                              ", Depth=" + std::to_string(octree.getTreeDepth()) +
+                              ", Leaves=" + std::to_string(octree.getLeafCount());
+    viewer->addText(octree_info, 10, 185, 14, 0.8, 0.8, 1, "octree_info");
+
+    // æ·»åŠ åæ ‡è½´
+    viewer->addCoordinateSystem(200.0);
+
+    // è®¾ç½®ç›¸æœºä½ç½®
+    viewer->initCameraParameters();
+    viewer->setCameraPosition(0, -800, 800, 0, 0, 400, 0, 0, 1);
+
+    std::cout << "\n=== Visualization Started ===" << std::endl;
+    std::cout << "Press 'q' in the window to exit" << std::endl;
+    std::cout << "Use mouse to rotate and scroll to zoom" << std::endl;
+    std::cout << "Press 'r' to reset camera view" << std::endl;
+
+    // ä¸»å¾ªç¯
+    while (!viewer->wasStopped())
+    {
+        viewer->spinOnce(100);
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    return 0;
 }

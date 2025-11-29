@@ -1,62 +1,131 @@
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
 #include <pcl/io/pcd_io.h>
 #include <pcl/filters/voxel_grid.h>
-#include <pcl/visualization/cloud_viewer.h>
-
-using namespace std;
+#include <pcl/visualization/pcl_visualizer.h>
+#include <iostream>
+#include <thread>
+#include <chrono>
 
 int main()
 {
-	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);				//´ıÂË²¨µãÔÆ
-	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZ>);		//ÂË²¨ºóµãÔÆ
+    // åˆ›å»ºç‚¹äº‘æŒ‡é’ˆ
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);          // åŸå§‹ç‚¹äº‘
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZ>); // ä¸‹é‡‡æ ·åç‚¹äº‘
 
-	// ¶ÁÈëµãÔÆÊı¾İ
-	cout << "->ÕıÔÚ¶ÁÈëµãÔÆ..." << endl;
-	pcl::PCDReader reader;
-	reader.read("test.pcd", *cloud);
-	cout << "\t\t<¶ÁÈëµãÔÆĞÅÏ¢>\n" << *cloud << endl;
+    // è¯»å–ç‚¹äº‘æ•°æ®
+    std::cout << "=== Loading Point Cloud ===" << std::endl;
+    if (pcl::io::loadPCDFile<pcl::PointXYZ>("test.pcd", *cloud) == -1)
+    {
+        PCL_ERROR("Could not read point cloud file!\n");
+        return -1;
+    }
+    std::cout << "Original point cloud: " << cloud->width * cloud->height
+              << " points" << std::endl;
 
-	// ÌåËØÂË²¨Æ÷µãÔÆÏÂ²ÉÑù
-	cout << "->ÕıÔÚÌåËØÏÂ²ÉÑù..." << endl;
-	pcl::VoxelGrid<pcl::PointXYZ> vg;				// ´´½¨ÂË²¨Æ÷¶ÔÏó
-	vg.setInputCloud(cloud);						// ÉèÖÃ´ıÂË²¨µãÔÆ
-	vg.setLeafSize(0.05f, 0.05f, 0.05f);			// ÉèÖÃÌåËØ´óĞ¡
-	vg.filter(*cloud_filtered);						// Ö´ĞĞÂË²¨£¬±£´æÂË²¨½á¹ûÓÚcloud_filtered
+    // ä½“ç´ ç½‘æ ¼ä¸‹é‡‡æ ·
+    std::cout << "\n=== Performing Voxel Grid Downsampling ===" << std::endl;
 
-	// ±£´æÏÂ²ÉÑùµãÔÆ
-	cout << "->ÕıÔÚ±£´æÏÂ²ÉÑùµãÔÆ..." << endl;
-	pcl::PCDWriter writer;
-	writer.write("sub.pcd", *cloud_filtered, true);
-	cout << "\t\t<±£´æµãÔÆĞÅÏ¢>\n" << *cloud_filtered << endl;
+    pcl::VoxelGrid<pcl::PointXYZ> vg;    // åˆ›å»ºä½“ç´ ç½‘æ ¼æ»¤æ³¢å™¨å¯¹è±¡
+    vg.setInputCloud(cloud);             // è®¾ç½®è¾“å…¥ç‚¹äº‘
+    vg.setLeafSize(0.05f, 0.05f, 0.05f); // è®¾ç½®ä½“ç´ å°ºå¯¸
+    vg.filter(*cloud_filtered);          // æ‰§è¡Œä¸‹é‡‡æ ·
 
-	// ¿ÉÊÓ»¯
+    std::cout << "Downsampled point cloud: " << cloud_filtered->width * cloud_filtered->height
+              << " points" << std::endl;
+    std::cout << "Reduction ratio: "
+              << (1.0 - static_cast<float>(cloud_filtered->size()) / cloud->size()) * 100
+              << "%" << std::endl;
+    std::cout << "Voxel leaf size: "
+              << vg.getLeafSize()[0] << " x "
+              << vg.getLeafSize()[1] << " x "
+              << vg.getLeafSize()[2] << std::endl;
 
-	pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer("ÂË²¨Ç°ºó¶Ô±È"));
+    // ä¿å­˜ä¸‹é‡‡æ ·ç‚¹äº‘
+    std::cout << "\n=== Saving Downsampled Point Cloud ===" << std::endl;
 
-	// ÊÓÍ¼1
-	int v1(0);
-	viewer->createViewPort(0.0, 0.0, 0.5, 1.0, v1); 
-	viewer->setBackgroundColor(0, 0, 0, v1); 
-	viewer->addText("befor_filtered", 10, 10, "v1_text", v1);
-	viewer->addPointCloud<pcl::PointXYZ>(cloud, "befor_filtered_cloud", v1);
+    if (cloud_filtered->empty())
+    {
+        PCL_ERROR("Downsampled point cloud is empty!\n");
+        return -1;
+    }
+    else
+    {
+        pcl::io::savePCDFileASCII("filtered.pcd", *cloud_filtered);
+        std::cout << "Downsampled point cloud saved to 'filtered.pcd'" << std::endl;
+    }
 
-	// ÊÓÍ¼2
-	int v2(0);
-	viewer->createViewPort(0.5, 0.0, 1.0, 1.0, v2);
-	viewer->setBackgroundColor(0.3, 0.3, 0.3, v2);
-	viewer->addText("after_filtered", 10, 10, "v2_text", v2);
-	viewer->addPointCloud<pcl::PointXYZ>(cloud_filtered, "after_filtered_cloud", v2);
+    // å¯è§†åŒ–
 
-	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "befor_filtered_cloud", v1);
-	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 1, 0, 0, "befor_filtered_cloud", v1);
+    // åˆ›å»ºå¯è§†åŒ–å™¨
+    pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer("Voxel Grid Downsampling Comparison"));
+    viewer->setBackgroundColor(0.05, 0.05, 0.15); // æ·±è“è‰²èƒŒæ™¯
 
-	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "after_filtered_cloud", v2);
-	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0, 1, 0, "after_filtered_cloud", v2);
+    // å·¦ä¾§è§†å£ - åŸå§‹ç‚¹äº‘
+    int v1(0);
+    viewer->createViewPort(0.0, 0.0, 0.5, 1.0, v1);
+    viewer->setBackgroundColor(0.1, 0.1, 0.2, v1);
 
-	while (!viewer->wasStopped())
-	{
-		viewer->spinOnce(100);
-	}
+    // æ·»åŠ åŸå§‹ç‚¹äº‘ï¼ˆçº¢è‰²ï¼‰
+    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> cloud_red(cloud, 255, 0, 0);
+    viewer->addPointCloud<pcl::PointXYZ>(cloud, cloud_red, "original_cloud", v1);
+    viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "original_cloud", v1);
 
-	return 0;
+    // æ·»åŠ æ–‡æœ¬è¯´æ˜
+    viewer->addText("Original Point Cloud", 10, 20, 16, 1, 1, 1, "original_text", v1);
+    std::string original_count = "Points: " + std::to_string(cloud->size());
+    viewer->addText(original_count, 10, 40, 14, 1, 1, 1, "original_count", v1);
+    viewer->addText("(High density)", 10, 60, 14, 1, 1, 1, "density_note", v1);
+
+    // å³ä¾§è§†å£ - ä¸‹é‡‡æ ·ç‚¹äº‘
+    int v2(0);
+    viewer->createViewPort(0.5, 0.0, 1.0, 1.0, v2);
+    viewer->setBackgroundColor(0.1, 0.2, 0.1, v2);
+
+    // æ·»åŠ ä¸‹é‡‡æ ·ç‚¹äº‘ï¼ˆç»¿è‰²ï¼‰
+    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> filtered_green(cloud_filtered, 0, 255, 0);
+    viewer->addPointCloud<pcl::PointXYZ>(cloud_filtered, filtered_green, "downsampled_cloud", v2);
+    viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "downsampled_cloud", v2);
+
+    // æ·»åŠ æ–‡æœ¬è¯´æ˜
+    viewer->addText("Downsampled Point Cloud", 10, 20, 16, 1, 1, 1, "downsampled_text", v2);
+    std::string downsampled_count = "Points: " + std::to_string(cloud_filtered->size());
+    viewer->addText(downsampled_count, 10, 40, 14, 1, 1, 1, "downsampled_count", v2);
+
+    // æ·»åŠ ä¸‹é‡‡æ ·å‚æ•°ä¿¡æ¯
+    std::string voxel_info = "Voxel size: 0.05 x 0.05 x 0.05";
+    viewer->addText(voxel_info, 10, 60, 14, 1, 1, 1, "voxel_info", v2);
+
+    std::string reduction_info = "Reduction: " +
+                                 std::to_string(static_cast<int>((1.0 - static_cast<float>(cloud_filtered->size()) / cloud->size()) * 100)) + "%";
+    viewer->addText(reduction_info, 10, 80, 14, 1, 1, 1, "reduction_info", v2);
+
+    // å…¬å…±è®¾ç½®
+
+    // æ·»åŠ æ ‡é¢˜
+    viewer->addText("Voxel Grid Downsampling", 300, 20, 18, 1, 1, 1, "title");
+
+    // æ·»åŠ åæ ‡è½´
+    viewer->addCoordinateSystem(1.0, "axis_v1", v1);
+    viewer->addCoordinateSystem(1.0, "axis_v2", v2);
+
+    // è®¾ç½®ç›¸æœºå‚æ•°
+    viewer->initCameraParameters();
+    viewer->setCameraPosition(0, 0, 5, 0, 0, 0, 0, 1, 0);
+
+    std::cout << "\n=== Visualization Started ===" << std::endl;
+    std::cout << "Left: Original point cloud (Red) - high density" << std::endl;
+    std::cout << "Right: Downsampled point cloud (Green) - reduced density" << std::endl;
+    std::cout << "Voxel size: 0.05 x 0.05 x 0.05" << std::endl;
+    std::cout << "Press 'q' to exit" << std::endl;
+    std::cout << "Use mouse to rotate and scroll to zoom" << std::endl;
+
+    // ä¸»å¾ªç¯
+    while (!viewer->wasStopped())
+    {
+        viewer->spinOnce(100);
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    return 0;
 }
-

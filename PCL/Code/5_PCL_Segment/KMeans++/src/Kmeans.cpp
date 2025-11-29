@@ -1,23 +1,39 @@
 #include "Kmeans.h"
 #include <random>
-#include <numeric> 
+#include <numeric>
 #include <algorithm>
 #include <pcl/common/centroid.h>
 #include <pcl/common/distances.h>
+#include <pcl/common/io.h>
 
-void KMeans::extract(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, std::vector<pcl::Indices>& cluster_idx)
+void KMeans::extract(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud, std::vector<pcl::Indices> &cluster_idx)
 {
-	// ×îÔ¶µã²ÉÑùÑ¡È¡¾ÛÀàÖĞĞÄµã
+	// K-means++ åˆå§‹åŒ–ï¼šä½¿ç”¨æœ€è¿œç‚¹é‡‡æ ·é€‰å–åˆå§‹èšç±»ä¸­å¿ƒ
 	std::vector<int> selected_indices;
 	selected_indices.reserve(m_clusterNum);
 	const size_t num_points = cloud->size();
-	std::vector<float> distances(num_points, std::numeric_limits<float>::infinity());
-	size_t farthest_index = 0;
+
+	// å¦‚æœç‚¹äº‘ä¸ºç©ºï¼Œç›´æ¥è¿”å›
+	if (num_points == 0)
+		return;
+
+	// åˆå§‹åŒ–è·ç¦»æ•°ç»„
+	std::vector<float> distances(num_points, std::numeric_limits<float>::max());
+
+	// éšæœºé€‰æ‹©ç¬¬ä¸€ä¸ªä¸­å¿ƒç‚¹
+	std::random_device rd;
+	std::mt19937 gen(rd());
+	std::uniform_int_distribution<> dis(0, num_points - 1);
+	size_t farthest_index = dis(gen);
+
+	// K-means++ åˆå§‹åŒ–è¿‡ç¨‹
 	for (size_t i = 0; i < m_clusterNum; i++)
 	{
 		selected_indices.push_back(farthest_index);
-		const pcl::PointXYZ& selected = cloud->points[farthest_index];
+		const pcl::PointXYZ &selected = cloud->points[farthest_index];
 		double max_dist = 0;
+
+		// æ›´æ–°æ‰€æœ‰ç‚¹åˆ°æœ€è¿‘ä¸­å¿ƒçš„è·ç¦»ï¼Œå¹¶æ‰¾åˆ°æœ€è¿œçš„ç‚¹
 		for (size_t j = 0; j < num_points; j++)
 		{
 			float dist = (cloud->points[j].getVector3fMap() - selected.getVector3fMap()).squaredNorm();
@@ -30,60 +46,74 @@ void KMeans::extract(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, std::vect
 		}
 	}
 
-	// »ñÈ¡¾ÛÀàÖĞĞÄµã
-	pcl::PointCloud<pcl::PointXYZ>::Ptr m_center(new pcl::PointCloud<pcl::PointXYZ>);
-	pcl::copyPointCloud(*cloud, selected_indices, *m_center);
+	// è·å–èšç±»ä¸­å¿ƒç‚¹
+	pcl::PointCloud<pcl::PointXYZ>::Ptr centers(new pcl::PointCloud<pcl::PointXYZ>);
+	pcl::copyPointCloud(*cloud, selected_indices, *centers);
 
-	// ½øĞĞ KMeans ¾ÛÀà
-	if (!cloud->empty() && !m_center->empty())
+	// è¿›è¡Œ K-means èšç±»è¿­ä»£
+	if (!cloud->empty() && !centers->empty())
 	{
 		int iterations = 0;
-		double sum_diff = 0.2;
-		// Èç¹û´óÓÚµü´ú´ÎÊı»òÕßÁ½´ÎÖØĞÄÖ®²îĞ¡ÓÚ0.02¾ÍÍ£Ö¹
-		while (!(iterations >= m_maxIteration || sum_diff <= 0.02))
+		double center_diff = 0.2;				   // åˆå§‹ä¸­å¿ƒç‚¹å˜åŒ–é‡
+		const double convergence_threshold = 0.02; // æ”¶æ•›é˜ˆå€¼
+
+		// è¿­ä»£ç›´åˆ°è¾¾åˆ°æœ€å¤§è¿­ä»£æ¬¡æ•°æˆ–ä¸­å¿ƒç‚¹å˜åŒ–å°äºé˜ˆå€¼
+		while (iterations < m_maxIteration && center_diff > convergence_threshold)
 		{
-			sum_diff = 0;
-			std::vector<int> points_processed(cloud->points.size(), 0);
+			center_diff = 0;
 			cluster_idx.clear();
 			cluster_idx.resize(m_clusterNum);
+
+			// åˆ†é…æ¯ä¸ªç‚¹åˆ°æœ€è¿‘çš„èšç±»ä¸­å¿ƒ
 			for (size_t i = 0; i < cloud->points.size(); ++i)
 			{
-				if (!points_processed[i])
+				std::vector<double> distances_to_centers;
+				for (size_t j = 0; j < m_clusterNum; ++j)
 				{
-					std::vector<double>dists(0, 0);
-					for (size_t j = 0; j < m_clusterNum; ++j)
-					{
-						// ¼ÆËãËùÓĞµãµ½¾ÛÀàÖĞĞÄµãµÄÅ·Ê½¾ÛÀà
-						dists.emplace_back(pcl::euclideanDistance(cloud->points[i], m_center->points[j]));
-					}
-					std::vector<double>::const_iterator min_dist = std::min_element(dists.cbegin(), dists.cend());
-					int it = std::distance(dists.cbegin(), min_dist); // »ñÈ¡×îĞ¡ÖµËùÔÚµÄÎ»ÖÃ
-					cluster_idx[it].push_back(i);                     // ·Å½ø×îĞ¡¾àÀëËùÔÚµÄ´Ø
-					points_processed[i] = 1;
+					// è®¡ç®—ç‚¹åˆ°èšç±»ä¸­å¿ƒçš„æ¬§å¼è·ç¦»
+					distances_to_centers.emplace_back(pcl::euclideanDistance(cloud->points[i], centers->points[j]));
 				}
-				else
-				{
-					continue;
-				}
-			}
-			// ÖØĞÂ¼ÆËã´ØÖĞĞÄµã
-			pcl::PointCloud<pcl::PointXYZ> new_centre;
-			for (size_t k = 0; k < m_clusterNum; ++k)
-			{
-				Eigen::Vector4f centroid;
-				pcl::compute3DCentroid(*cloud, cluster_idx.at(k), centroid);
-				pcl::PointXYZ center{ centroid[0] ,centroid[1] ,centroid[2] };
-				new_centre.points.push_back(center);
+
+				// æ‰¾åˆ°æœ€è¿‘çš„èšç±»ä¸­å¿ƒ
+				auto min_dist = std::min_element(distances_to_centers.cbegin(), distances_to_centers.cend());
+				int cluster_id = std::distance(distances_to_centers.cbegin(), min_dist);
+
+				// å°†ç‚¹åˆ†é…åˆ°å¯¹åº”çš„èšç±»
+				cluster_idx[cluster_id].push_back(i);
 			}
 
-			// ¼ÆËã¾ÛÀàÖĞĞÄµãµÄ±ä»¯Á¿
+			// é‡æ–°è®¡ç®—èšç±»ä¸­å¿ƒ
+			pcl::PointCloud<pcl::PointXYZ> new_centers;
+			for (size_t k = 0; k < m_clusterNum; ++k)
+			{
+				// å¦‚æœèšç±»ä¸ºç©ºï¼Œä½¿ç”¨éšæœºç‚¹ä½œä¸ºæ–°ä¸­å¿ƒ
+				if (cluster_idx[k].empty())
+				{
+					int random_index = dis(gen);
+					new_centers.points.push_back(cloud->points[random_index]);
+					continue;
+				}
+
+				// è®¡ç®—èšç±»çš„é‡å¿ƒ
+				Eigen::Vector4f centroid;
+				pcl::compute3DCentroid(*cloud, cluster_idx[k], centroid);
+				pcl::PointXYZ center{centroid[0], centroid[1], centroid[2]};
+				new_centers.points.push_back(center);
+			}
+
+			// è®¡ç®—èšç±»ä¸­å¿ƒçš„å˜åŒ–é‡
 			for (size_t s = 0; s < m_clusterNum; ++s)
 			{
-				sum_diff += pcl::euclideanDistance(new_centre.points[s], m_center->points[s]);
+				center_diff += pcl::euclideanDistance(new_centers.points[s], centers->points[s]);
 			}
-			m_center->points.clear();
-			*m_center = new_centre;
+
+			// æ›´æ–°èšç±»ä¸­å¿ƒ
+			centers->points.clear();
+			*centers = new_centers;
+
 			++iterations;
 		}
+
+		std::cout << "K-means++ converged after " << iterations << " iterations" << std::endl;
 	}
 }

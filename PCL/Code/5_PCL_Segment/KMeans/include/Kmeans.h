@@ -1,25 +1,33 @@
 #pragma once
 
-#include <iostream>
-#include <pcl/io/pcd_io.h>
+#include <vector>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 
 class KMeans
 {
 private:
-
-	int m_maxIteration; // ×î´óµü´ú´ÎÊı
-	int m_clusterNum;   // ¾ÛÀà¸öÊı
-	//pcl::PointCloud<pcl::PointXYZ>::Ptr m_center; // ¾ÛÀàÖĞĞÄµã
+    int m_maxIteration;  // æœ€å¤§è¿­ä»£æ¬¡æ•°
+    int m_clusterNum;    // èšç±»æ•°é‡
 
 public:
+    /**
+     * @brief KMeansç±»æ„é€ å‡½æ•°
+     * @param k èšç±»æ•°é‡
+     * @param max_iteration æœ€å¤§è¿­ä»£æ¬¡æ•°
+     */
+    KMeans(int k, int max_iteration) : 
+        m_clusterNum(k), 
+        m_maxIteration(max_iteration) 
+    {}
+    
+    ~KMeans() = default;
 
-	KMeans(int k, int max_iteration) :
-		m_clusterNum(k), m_maxIteration(max_iteration)/**, m_center(new pcl::PointCloud<pcl::PointXYZ>)*/ {}
-	~KMeans() {}
-
-	void extract(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, std::vector<pcl::Indices>& cluster_idx);
-
+    /**
+     * @brief ä½¿ç”¨K-meansç®—æ³•æå–èšç±»
+     * @param cloud è¾“å…¥ç‚¹äº‘
+     * @param cluster_idx è¾“å‡ºèšç±»ç´¢å¼•
+     */
+    void extract(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, 
+                 std::vector<pcl::Indices>& cluster_idx);
 };
-

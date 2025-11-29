@@ -1,73 +1,173 @@
 #include <iostream>
 #include <string>
-#include "dbscan.h"
-#include <pcl/io/pcd_io.h>
+#include <vector>
 #include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+#include <pcl/io/pcd_io.h>
 #include <pcl/common/time.h>
-#include <pcl/visualization/cloud_viewer.h>
+#include <pcl/visualization/pcl_visualizer.h>
+#include <pcl/search/kdtree.h>
+#include <thread>
+#include <chrono>
 
-using namespace std;
+#include "dbscan.h"
 
 int main()
 {
-	// ¶ÁÈ¡Êı¾İ
-	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    // è¯»å–ç‚¹äº‘æ•°æ®
+    std::cout << "=== Loading Point Cloud ===" << std::endl;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
 
-	if (pcl::io::loadPCDFile<pcl::PointXYZ>("test.pcd", *cloud) < 0)
-	{
-		PCL_ERROR("µãÔÆ¶ÁÈ¡Ê§°Ü£¡£¡£¡ \n");
-		return -1;
-	}
-	cout << "´ÓµãÔÆÊı¾İÖĞ¶ÁÈ¡£º" << cloud->points.size() << "¸öµã" << endl;
+    if (pcl::io::loadPCDFile<pcl::PointXYZ>("test.pcd", *cloud) == -1)
+    {
+        PCL_ERROR("Could not read point cloud file!\n");
+        return -1;
+    }
+    std::cout << "Point cloud loaded: " << cloud->points.size() << " points" << std::endl;
 
-	// ÃÜ¶È¾ÛÀà
-	pcl::StopWatch time;
-	vector<pcl::Indices> cluster_indices;
-	dbscan(*cloud, cluster_indices, 1, 50); // 2±íÊ¾¾ÛÀàµÄÁìÓò¾àÀëÎª2Ã×£¬50±íÊ¾¾ÛÀàµÄ×îĞ¡µãÊı¡£
+    // DBSCAN å¯†åº¦èšç±»
+    std::cout << "\n=== Performing DBSCAN Clustering ===" << std::endl;
 
-	cout << "ÃÜ¶È¾ÛÀàµÄ¸öÊıÎª£º" << cluster_indices.size() << endl;
-	cout << "´úÂëÔËĞĞÊ±¼ä:" << time.getTimeSeconds() << "Ãë" << endl;
+    pcl::StopWatch timer;
+    std::vector<pcl::Indices> cluster_indices;
 
-	// ¾ÛÀà½á¹û·ÖÀà±£´æ
-	int begin = 1;
-	pcl::PointCloud<pcl::PointXYZRGB>::Ptr dbscan_all_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
-	for (vector<pcl::Indices>::const_iterator it = cluster_indices.begin(); it != cluster_indices.end(); ++it)
-	{
-		// »ñÈ¡Ã¿Ò»¸ö¾ÛÀàµãÔÆÍÅµÄµã
-		pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_dbscan(new pcl::PointCloud<pcl::PointXYZRGB>);
-		// Í¬Ò»µãÔÆÍÅ¸³ÉÏÍ¬Ò»ÖÖÑÕÉ«
-		uint8_t R = rand() % (256) + 0;
-		uint8_t G = rand() % (256) + 0;
-		uint8_t B = rand() % (256) + 0;
+    double epsilon = 1.0; // é‚»åŸŸè·ç¦»é˜ˆå€¼ (ç±³)
+    int min_points = 50;  // æœ€å°ç‚¹æ•°
 
-		for (auto pit = it->begin(); pit != it->end(); ++pit)
-		{
-			pcl::PointXYZRGB point_db;
-			point_db.x = cloud->points[*pit].x;
-			point_db.y = cloud->points[*pit].y;
-			point_db.z = cloud->points[*pit].z;
-			point_db.r = R;
-			point_db.g = G;
-			point_db.b = B;
-			cloud_dbscan->points.push_back(point_db);
-		}
-		// ¾ÛÀà½á¹û·ÖÀà±£´æ
-		stringstream ss;
-		ss << "dbscan_cluster_" << begin << ".pcd";
-		pcl::PCDWriter writer;
-		writer.write<pcl::PointXYZRGB>(ss.str(), *cloud_dbscan, true);
-		begin++;
+    bool success = dbscan(*cloud, cluster_indices, epsilon, min_points);
 
-		*dbscan_all_cloud += *cloud_dbscan;
-	}
+    if (!success)
+    {
+        PCL_ERROR("DBSCAN clustering failed!\n");
+        return -1;
+    }
 
-	// ¾ÛÀà½á¹û¿ÉÊÓ»¯
-	pcl::visualization::CloudViewer viewer("DBSCAN cloud viewer.");
-	viewer.showCloud(dbscan_all_cloud);
-	while (!viewer.wasStopped())
-	{
+    std::cout << "DBSCAN clustering completed in " << timer.getTimeSeconds() << " seconds" << std::endl;
+    std::cout << "Found " << cluster_indices.size() << " clusters" << std::endl;
 
-	}
-	return 0;
+    // èšç±»ç»“æœå¤„ç†å’Œä¿å­˜
+    std::cout << "\n=== Processing and Saving Clustering Results ===" << std::endl;
+
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr clustered_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+    std::vector<std::vector<uint8_t>> colors = {
+        {255, 0, 0},   // çº¢è‰²
+        {0, 255, 0},   // ç»¿è‰²
+        {0, 0, 255},   // è“è‰²
+        {255, 255, 0}, // é»„è‰²
+        {255, 0, 255}, // ç´«è‰²
+        {0, 255, 255}, // é’è‰²
+        {255, 128, 0}, // æ©™è‰²
+        {128, 0, 255}, // ç´«ç½—å…°è‰²
+        {128, 255, 0}, // é»„ç»¿è‰²
+        {0, 128, 255}  // å¤©è“è‰²
+    };
+
+    int cluster_id = 1;
+    for (const auto &cluster : cluster_indices)
+    {
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr cluster_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+
+        // ä¸ºæ¯ä¸ªèšç±»åˆ†é…é¢œè‰²
+        std::vector<uint8_t> color = colors[(cluster_id - 1) % colors.size()];
+
+        // å¡«å……èšç±»ç‚¹äº‘
+        for (const auto &point_index : cluster)
+        {
+            pcl::PointXYZRGB colored_point;
+            colored_point.x = cloud->points[point_index].x;
+            colored_point.y = cloud->points[point_index].y;
+            colored_point.z = cloud->points[point_index].z;
+            colored_point.r = color[0];
+            colored_point.g = color[1];
+            colored_point.b = color[2];
+            cluster_cloud->points.push_back(colored_point);
+        }
+
+        cluster_cloud->width = cluster_cloud->points.size();
+        cluster_cloud->height = 1;
+        cluster_cloud->is_dense = true;
+
+        std::cout << "Cluster " << cluster_id << ": " << cluster_cloud->points.size() << " points" << std::endl;
+
+        // ä¿å­˜å•ä¸ªèšç±»
+        std::string filename = "dbscan_cluster_" + std::to_string(cluster_id) + ".pcd";
+        pcl::io::savePCDFileASCII(filename, *cluster_cloud);
+
+        // åˆå¹¶åˆ°æ€»ç‚¹äº‘ç”¨äºå¯è§†åŒ–
+        *clustered_cloud += *cluster_cloud;
+        cluster_id++;
+    }
+
+    std::cout << "Clusters saved to individual PCD files" << std::endl;
+
+    // å¯è§†åŒ–
+
+    // åˆ›å»ºå¯è§†åŒ–å™¨
+    pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer("DBSCAN Clustering Results"));
+    viewer->setBackgroundColor(0.05, 0.05, 0.15); // æ·±è“è‰²èƒŒæ™¯
+
+    // å·¦ä¾§è§†å£ - åŸå§‹ç‚¹äº‘
+    int v1(0);
+    viewer->createViewPort(0.0, 0.0, 0.5, 1.0, v1);
+    viewer->setBackgroundColor(0.1, 0.1, 0.2, v1);
+
+    // æ·»åŠ åŸå§‹ç‚¹äº‘ï¼ˆç™½è‰²ï¼‰
+    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> cloud_white(cloud, 255, 255, 255);
+    viewer->addPointCloud<pcl::PointXYZ>(cloud, cloud_white, "original_cloud", v1);
+    viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "original_cloud", v1);
+
+    // æ·»åŠ æ–‡æœ¬è¯´æ˜
+    viewer->addText("Original Point Cloud", 10, 20, 16, 1, 1, 1, "original_text", v1);
+    std::string original_count = "Points: " + std::to_string(cloud->size());
+    viewer->addText(original_count, 10, 40, 14, 1, 1, 1, "original_count", v1);
+
+    // å³ä¾§è§†å£ - èšç±»ç»“æœ
+    int v2(0);
+    viewer->createViewPort(0.5, 0.0, 1.0, 1.0, v2);
+    viewer->setBackgroundColor(0.1, 0.15, 0.1, v2);
+
+    // æ·»åŠ èšç±»ç»“æœç‚¹äº‘
+    viewer->addPointCloud<pcl::PointXYZRGB>(clustered_cloud, "clustered_cloud", v2);
+    viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "clustered_cloud", v2);
+
+    // æ·»åŠ æ–‡æœ¬è¯´æ˜
+    viewer->addText("DBSCAN Clustering Results", 10, 20, 16, 1, 1, 1, "clustered_text", v2);
+    std::string cluster_count = "Clusters: " + std::to_string(cluster_indices.size());
+    viewer->addText(cluster_count, 10, 40, 14, 1, 1, 1, "cluster_count", v2);
+
+    // æ·»åŠ å‚æ•°ä¿¡æ¯
+    std::string params_info = "Epsilon: " + std::to_string(epsilon) + ", MinPts: " + std::to_string(min_points);
+    viewer->addText(params_info, 10, 60, 14, 1, 1, 1, "params_info", v2);
+
+    std::string time_info = "Time: " + std::to_string(timer.getTimeSeconds()) + "s";
+    viewer->addText(time_info, 10, 80, 14, 1, 1, 1, "time_info", v2);
+
+    // å…¬å…±è®¾ç½®
+
+    // æ·»åŠ æ ‡é¢˜
+    viewer->addText("DBSCAN Density-Based Clustering", 300, 20, 18, 1, 1, 1, "title");
+
+    // æ·»åŠ åæ ‡è½´
+    viewer->addCoordinateSystem(1.0, "axis_v1", v1);
+    viewer->addCoordinateSystem(1.0, "axis_v2", v2);
+
+    // è®¾ç½®ç›¸æœºå‚æ•°
+    viewer->initCameraParameters();
+    viewer->setCameraPosition(0, 0, 5, 0, 0, 0, 0, 1, 0);
+
+    std::cout << "\n=== Visualization Started ===" << std::endl;
+    std::cout << "Left: Original point cloud (White)" << std::endl;
+    std::cout << "Right: DBSCAN clustering results (Colored clusters)" << std::endl;
+    std::cout << "Parameters: Epsilon=" << epsilon << ", MinPoints=" << min_points << std::endl;
+    std::cout << "Press 'q' to exit" << std::endl;
+    std::cout << "Use mouse to rotate and scroll to zoom" << std::endl;
+
+    // ä¸»å¾ªç¯
+    while (!viewer->wasStopped())
+    {
+        viewer->spinOnce(100);
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    return 0;
 }
-

@@ -1,65 +1,132 @@
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
 #include <pcl/io/pcd_io.h>
 #include <pcl/filters/statistical_outlier_removal.h>
-#include <pcl/visualization/cloud_viewer.h>
-
-using namespace std;
+#include <pcl/visualization/pcl_visualizer.h>
+#include <iostream>
+#include <thread>
+#include <chrono>
 
 int main()
 {
+    // åˆ›å»ºç‚¹äº‘æŒ‡é’ˆ
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);          // åŸå§‹ç‚¹äº‘
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZ>); // æ»¤æ³¢åç‚¹äº‘
 
-	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);				//´ıÂË²¨µãÔÆ
-	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZ>);		//ÂË²¨ºóµãÔÆ
+    // è¯»å–ç‚¹äº‘æ•°æ®
+    std::cout << "=== Loading Point Cloud ===" << std::endl;
+    if (pcl::io::loadPCDFile<pcl::PointXYZ>("test.pcd", *cloud) == -1)
+    {
+        PCL_ERROR("Could not read point cloud file!\n");
+        return -1;
+    }
+    std::cout << "Original point cloud: " << cloud->width * cloud->height
+              << " points" << std::endl;
 
-	// ¶ÁÈëµãÔÆÊı¾İ
-	cout << "->ÕıÔÚ¶ÁÈëµãÔÆ..." << endl;
-	pcl::PCDReader reader;
-	reader.read("test.pcd", *cloud);
-	cout << "\t\t<¶ÁÈëµãÔÆĞÅÏ¢>\n" << *cloud << endl;
+    // ç»Ÿè®¡ç¦»ç¾¤ç‚¹å»é™¤
+    std::cout << "\n=== Performing Statistical Outlier Removal ===" << std::endl;
 
-	// Í³¼ÆÂË²¨
-	cout << "->ÕıÔÚ½øĞĞÍ³¼ÆÂË²¨..." << endl;
-	pcl::StatisticalOutlierRemoval<pcl::PointXYZ> sor;				//´´½¨ÂË²¨Æ÷¶ÔÏó
-	sor.setInputCloud(cloud);										//ÉèÖÃ´ıÂË²¨µãÔÆ
-	sor.setMeanK(50);												//ÉèÖÃ²éÑ¯µã½üÁÚµãµÄ¸öÊı
-	sor.setStddevMulThresh(1.0);									//ÉèÖÃ±ê×¼²î³ËÊı£¬À´¼ÆËãÊÇ·ñÎªÀëÈºµãµÄãĞÖµ
-	//sor.setNegative(true);						
-	sor.filter(*cloud_filtered);									//Ö´ĞĞÂË²¨£¬±£´æÂË²¨½á¹ûÓÚcloud_filtered
+    pcl::StatisticalOutlierRemoval<pcl::PointXYZ> sor; // åˆ›å»ºç»Ÿè®¡æ»¤æ³¢å™¨å¯¹è±¡
+    sor.setInputCloud(cloud);                          // è®¾ç½®è¾“å…¥ç‚¹äº‘
+    sor.setMeanK(50);                                  // è®¾ç½®æ¯ä¸ªç‚¹çš„è¿‘é‚»ç‚¹æ•°é‡
+    sor.setStddevMulThresh(1.0);                       // è®¾ç½®æ ‡å‡†å·®å€æ•°é˜ˆå€¼
 
-	// ±£´æÏÂ²ÉÑùµãÔÆ
-	cout << "->ÕıÔÚ±£´æÂË²¨µãÔÆ..." << endl;
-	pcl::PCDWriter writer;
-	writer.write("StatisticalOutlierRemoval.pcd", *cloud_filtered, true);
-	cout << "\t\t<±£´æµãÔÆĞÅÏ¢>\n" << *cloud_filtered << endl;
+    sor.filter(*cloud_filtered); // æ‰§è¡Œæ»¤æ³¢
 
-	// ¿ÉÊÓ»¯
+    std::cout << "Filtered point cloud: " << cloud_filtered->width * cloud_filtered->height
+              << " points" << std::endl;
+    std::cout << "Removed " << cloud->size() - cloud_filtered->size()
+              << " outlier points" << std::endl;
+    std::cout << "Parameters: MeanK=" << sor.getMeanK()
+              << ", StddevMulThresh=" << sor.getStddevMulThresh() << std::endl;
 
-	pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer("ÂË²¨Ç°ºó¶Ô±È"));
+    // ä¿å­˜æ»¤æ³¢ç»“æœ
+    std::cout << "\n=== Saving Filtered Point Cloud ===" << std::endl;
 
-	// ÊÓÍ¼1
-	int v1(0);
-	viewer->createViewPort(0.0, 0.0, 0.5, 1.0, v1); 
-	viewer->setBackgroundColor(0, 0, 0, v1);
-	viewer->addText("befor_filtered", 10, 10, "v1_text", v1);
-	viewer->addPointCloud<pcl::PointXYZ>(cloud, "befor_filtered_cloud", v1);
+    if (cloud_filtered->empty())
+    {
+        PCL_ERROR("Filtered point cloud is empty!\n");
+        return -1;
+    }
+    else
+    {
+        pcl::io::savePCDFileASCII("filtered.pcd", *cloud_filtered);
+        std::cout << "Filtered point cloud saved to 'filtered.pcd'" << std::endl;
+    }
 
-	// ÊÓÍ¼2
-	int v2(0);
-	viewer->createViewPort(0.5, 0.0, 1.0, 1.0, v2);
-	viewer->setBackgroundColor(0.3, 0.3, 0.3, v2);
-	viewer->addText("after_filtered", 10, 10, "v2_text", v2);
-	viewer->addPointCloud<pcl::PointXYZ>(cloud_filtered, "after_filtered_cloud", v2);
+    // å¯è§†åŒ–
 
-	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "befor_filtered_cloud", v1);
-	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 1, 0, 0, "befor_filtered_cloud", v1);
+    // åˆ›å»ºå¯è§†åŒ–å™¨
+    pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer("Statistical Outlier Removal Comparison"));
+    viewer->setBackgroundColor(0.05, 0.05, 0.15); // æ·±è“è‰²èƒŒæ™¯
 
-	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "after_filtered_cloud", v2);
-	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0, 1, 0, "after_filtered_cloud", v2);
+    // å·¦ä¾§è§†å£ - åŸå§‹ç‚¹äº‘
+    int v1(0);
+    viewer->createViewPort(0.0, 0.0, 0.5, 1.0, v1);
+    viewer->setBackgroundColor(0.1, 0.1, 0.2, v1);
 
-	while (!viewer->wasStopped())
-	{
-		viewer->spinOnce(100);
-	}
+    // æ·»åŠ åŸå§‹ç‚¹äº‘
+    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> cloud_red(cloud, 255, 0, 0);
+    viewer->addPointCloud<pcl::PointXYZ>(cloud, cloud_red, "original_cloud", v1);
+    viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "original_cloud", v1);
 
-	return 0;
+    // æ·»åŠ æ–‡æœ¬è¯´æ˜
+    viewer->addText("Original Point Cloud", 10, 20, 16, 1, 1, 1, "original_text", v1);
+    std::string original_count = "Points: " + std::to_string(cloud->size());
+    viewer->addText(original_count, 10, 40, 14, 1, 1, 1, "original_count", v1);
+    viewer->addText("(May contain outliers)", 10, 60, 14, 1, 1, 1, "outlier_note", v1);
+
+    // å³ä¾§è§†å£ - æ»¤æ³¢åç‚¹äº‘
+    int v2(0);
+    viewer->createViewPort(0.5, 0.0, 1.0, 1.0, v2);
+    viewer->setBackgroundColor(0.1, 0.2, 0.1, v2);
+
+    // æ·»åŠ æ»¤æ³¢åç‚¹äº‘
+    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> filtered_green(cloud_filtered, 0, 255, 0);
+    viewer->addPointCloud<pcl::PointXYZ>(cloud_filtered, filtered_green, "filtered_cloud", v2);
+    viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "filtered_cloud", v2);
+
+    // æ·»åŠ æ–‡æœ¬è¯´æ˜
+    viewer->addText("Filtered Point Cloud", 10, 20, 16, 1, 1, 1, "filtered_text", v2);
+    std::string filtered_count = "Points: " + std::to_string(cloud_filtered->size());
+    viewer->addText(filtered_count, 10, 40, 14, 1, 1, 1, "filtered_count", v2);
+
+    // æ·»åŠ æ»¤æ³¢å‚æ•°ä¿¡æ¯
+    std::string filter_params = "MeanK: " + std::to_string(sor.getMeanK());
+    viewer->addText(filter_params, 10, 60, 14, 1, 1, 1, "meanK_info", v2);
+
+    std::string threshold_info = "Stddev Threshold: " + std::to_string(sor.getStddevMulThresh());
+    viewer->addText(threshold_info, 10, 80, 14, 1, 1, 1, "threshold_info", v2);
+
+    std::string removed_info = "Outliers Removed: " + std::to_string(cloud->size() - cloud_filtered->size());
+    viewer->addText(removed_info, 10, 100, 14, 1, 1, 1, "removed_info", v2);
+
+    // å…¬å…±è®¾ç½®
+
+    // æ·»åŠ æ ‡é¢˜
+    viewer->addText("Statistical Outlier Removal Filter", 300, 20, 18, 1, 1, 1, "title");
+
+    // æ·»åŠ åæ ‡è½´
+    viewer->addCoordinateSystem(1.0, "axis_v1", v1);
+    viewer->addCoordinateSystem(1.0, "axis_v2", v2);
+
+    // è®¾ç½®ç›¸æœºå‚æ•°
+    viewer->initCameraParameters();
+    viewer->setCameraPosition(0, 0, 5, 0, 0, 0, 0, 1, 0);
+
+    std::cout << "\n=== Visualization Started ===" << std::endl;
+    std::cout << "Left: Original point cloud (Red) - may contain outliers" << std::endl;
+    std::cout << "Right: Filtered point cloud (Green) - outliers removed" << std::endl;
+    std::cout << "Filter parameters: MeanK=50, StddevMulThresh=1.0" << std::endl;
+    std::cout << "Press 'q' to exit" << std::endl;
+    std::cout << "Use mouse to rotate and scroll to zoom" << std::endl;
+
+    // ä¸»å¾ªç¯
+    while (!viewer->wasStopped())
+    {
+        viewer->spinOnce(100);
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    return 0;
 }
-

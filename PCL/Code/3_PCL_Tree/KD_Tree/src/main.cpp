@@ -1,123 +1,160 @@
-#include <pcl/point_cloud.h>					// µãÔÆÀàĞÍ
-#include <pcl/kdtree/kdtree_flann.h>			// KDtreeÏà¹Ø¶¨Òå
-#include <pcl/visualization/cloud_viewer.h>		// ¿ÉÊÓ»¯Ïà¹Ø¶¨Òå
-
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+#include <pcl/kdtree/kdtree_flann.h>
+#include <pcl/visualization/pcl_visualizer.h>
 #include <iostream>
-#include <vector>
-#include <ctime>
-
 #include <thread>
 #include <chrono>
 
-using namespace std;
-
-int main(int argc, char** argv)
+int main()
 {
+    // åˆ›å»ºç‚¹äº‘æ•°æ®
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    cloud->width = 1000;
+    cloud->height = 1; // æ— åºç‚¹äº‘
+    cloud->points.resize(cloud->width * cloud->height);
 
-	// Ê¹ÓÃÏµÍ³Ê±¼ä×öËæ»úÊıÖÖ×Ó
-	srand(time(NULL));
+    for (size_t i = 0; i < cloud->points.size(); ++i)
+    {
+        cloud->points[i].x = 1024.0f * rand() / (RAND_MAX + 1.0f);
+        cloud->points[i].y = 1024.0f * rand() / (RAND_MAX + 1.0f);
+        cloud->points[i].z = 1024.0f * rand() / (RAND_MAX + 1.0f);
+    }
 
-	// ´´½¨Ò»¸öPointXYZÀàĞÍµãÔÆÖ¸Õë
-	pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+    // åˆ›å»º KD æ ‘
+    pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
+    kdtree.setInputCloud(cloud);
 
-	// ³õÊ¼»¯µãÔÆÊı¾İ
-	cloud->width = 1000;// ¿íÎª1000
-	cloud->height = 1;//¸ßÎª1£¬ËµÃ÷ÎªÎŞĞòµãÔÆ
-	cloud->points.resize(cloud->width * cloud->height);
+    // KNN æœç´¢
+    pcl::PointXYZ searchPoint;
+    searchPoint.x = 1024.0f * rand() / (RAND_MAX + 1.0f);
+    searchPoint.y = 1024.0f * rand() / (RAND_MAX + 1.0f);
+    searchPoint.z = 1024.0f * rand() / (RAND_MAX + 1.0f);
 
-	// Ê¹ÓÃËæ»úÊıÌî³äÊı¾İ
-	for (size_t i = 0; i < cloud->size(); ++i)
-	{
-		cloud->points[i].x = 1024.0f * rand() / (RAND_MAX + 1.0f);
-		cloud->points[i].y = 1024.0f * rand() / (RAND_MAX + 1.0f);
-		cloud->points[i].z = 1024.0f * rand() / (RAND_MAX + 1.0f);
-		cloud->points[i].b = 0;
-		cloud->points[i].g = 255;
-		cloud->points[i].r = 0;
-	}
+    int k = 5;                                        // æŸ¥è¯¢ 5 ä¸ªæœ€è¿‘é‚»ç‚¹
+    std::vector<int> point_idx_knn_search(k);         // å­˜å‚¨ K è¿‘é‚»ç´¢å¼•
+    std::vector<float> point_knn_squared_distance(k); // å­˜å‚¨ K è¿‘é‚»çš„å¹³æ–¹è·ç¦»
 
-	// ´´½¨ k-d tree
-	pcl::KdTreeFLANN<pcl::PointXYZRGB> kdtree;
+    std::cout << "=== KNN Search Results ===" << std::endl;
+    std::cout << "Search point: (" << searchPoint.x << ", " << searchPoint.y << ", " << searchPoint.z << ")" << std::endl;
+    std::cout << "K = " << k << std::endl;
 
-	// ÉèÖÃµãÔÆÊäÈë,½«ÔÚcloudÖĞËÑË÷
-	kdtree.setInputCloud(cloud);
+    if (kdtree.nearestKSearch(searchPoint, k, point_idx_knn_search, point_knn_squared_distance) > 0)
+    {
+        for (size_t i = 0; i < point_idx_knn_search.size(); ++i)
+        {
+            std::cout << "  " << cloud->points[point_idx_knn_search[i]].x << " " << cloud->points[point_idx_knn_search[i]].y << " " << cloud->points[point_idx_knn_search[i]].z << " (squared distance: " << point_knn_squared_distance[i] << ")" << std::endl;
+        }
+    }
 
-	// ÉèÖÃ±»ËÑË÷µã,ÓÃËæ»úÊıÌî³ä
-	pcl::PointXYZRGB searchPoint;
-	searchPoint.x = 1024.0f * rand() / (RAND_MAX + 1.0f);
-	searchPoint.y = 1024.0f * rand() / (RAND_MAX + 1.0f);
-	searchPoint.z = 1024.0f * rand() / (RAND_MAX + 1.0f);
-	searchPoint.b = 0;
-	searchPoint.g = 0;
-	searchPoint.r = 255;
+    // åŠå¾„æœç´¢
+    float radius = 300.0f; // æœç´¢åŠå¾„
+    std::vector<int> point_idx_radius_search;
+    std::vector<float> point_radius_squared_distance;
 
-	// ¿ªÊ¼ KNN ËÑË÷,KÉèÖÃÎª10
-	int K = 10;
+    std::cout << "\n=== Radius Search Results ===" << std::endl;
+    std::cout << "Search radius: " << radius << std::endl;
 
-	// »ùÓÚ°ë¾¶µÄÁÚÓòËÑË÷
-	float radius = 256.0f * rand() / (RAND_MAX + 1.0f);
+    if (kdtree.radiusSearch(searchPoint, radius, point_idx_radius_search, point_radius_squared_distance) > 0)
+    {
+        std::cout << "Found " << point_idx_radius_search.size() << " points within radius " << radius << std::endl;
 
-	// ´æ´¢ËÑË÷½á¹û
-	vector<int> pointIdxRadiusSearch;
-	vector<float> pointRadiusSquaredDistance;
+        // æ˜¾ç¤ºå‰10ä¸ªç‚¹
+        int display_count = std::min(10, (int)point_idx_radius_search.size());
+        for (int i = 0; i < display_count; ++i)
+        {
+            std::cout << "  Point " << i + 1 << ": (" << cloud->points[point_idx_radius_search[i]].x << ", " << cloud->points[point_idx_radius_search[i]].y << ", " << cloud->points[point_idx_radius_search[i]].z << ") - squared distance: " << point_radius_squared_distance[i] << std::endl;
+        }
+        if (point_idx_radius_search.size() > 10)
+        {
+            std::cout << "  ... and " << point_idx_radius_search.size() - 10 << " more points" << std::endl;
+        }
+    }
 
-	// ´æ´¢ËÑË÷½á¹û
-	vector<int> pointIdxNKNSearch(K);			// ±£´æÏÂ±ê
-	vector<float> pointNKNSquaredDistance(K);	// ±£´æ¾àÀëµÄÆ½·½
+    // å¯è§†åŒ–
+    // åˆ›å»ºå¯è§†åŒ–å™¨
+    pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer("KD-Tree Search Visualization"));
+    viewer->setBackgroundColor(0.05, 0.05, 0.15); // æ·±è“è‰²èƒŒæ™¯
 
-	// KNN
-	cout << "K nearest neighbor search at (" << searchPoint.x
-		<< " " << searchPoint.y
-		<< " " << searchPoint.z
-		<< ") with K = " << K << endl;
+    // æ·»åŠ åŸå§‹ç‚¹äº‘
+    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> cloud_gray(cloud, 200, 200, 200);
+    viewer->addPointCloud<pcl::PointXYZ>(cloud, cloud_gray, "original_cloud");
+    viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "original_cloud");
 
-	if (kdtree.nearestKSearch(searchPoint, K, pointIdxNKNSearch, pointNKNSquaredDistance) > 0)
-	{
-		for (size_t i = 0; i < pointIdxNKNSearch.size(); ++i)
-		{
-			cout << "    " << cloud->points[pointIdxNKNSearch[i]].x
-				<< " " << cloud->points[pointIdxNKNSearch[i]].y
-				<< " " << cloud->points[pointIdxNKNSearch[i]].z
-				<< "( squared distance: " << pointNKNSquaredDistance[i] << " )" << endl;
-			// ²éÑ¯µãÁÚÓòÄÚµÄµã×ÅÉ«
-			cloud->points[pointIdxNKNSearch[i]].r = 0;
-			cloud->points[pointIdxNKNSearch[i]].g = 0;
-			cloud->points[pointIdxNKNSearch[i]].b = 255;
-		}
-	}
+    // åˆ›å»ºæŸ¥è¯¢ç‚¹ç‚¹äº‘
+    pcl::PointCloud<pcl::PointXYZ>::Ptr search_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    search_cloud->push_back(searchPoint);
+    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> search_red(search_cloud, 255, 0, 0);
+    viewer->addPointCloud<pcl::PointXYZ>(search_cloud, search_red, "search_point");
+    viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 15, "search_point");
 
-	// Radius Search
-	cout << "Neighbors within radius search at (" << searchPoint.x
-		<< " " << searchPoint.y
-		<< " " << searchPoint.z
-		<< ") with radius=" << radius << endl;
+    // åˆ›å»º KNN ç‚¹ç‚¹äº‘
+    pcl::PointCloud<pcl::PointXYZ>::Ptr knn_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    for (size_t i = 0; i < point_idx_knn_search.size(); ++i)
+    {
+        knn_cloud->push_back(cloud->points[point_idx_knn_search[i]]);
+    }
+    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> knn_green(knn_cloud, 0, 255, 0);
+    viewer->addPointCloud<pcl::PointXYZ>(knn_cloud, knn_green, "knn_points");
+    viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 8, "knn_points");
 
-	// ±ê¼ÇËÑË÷½á¹û
-	if (kdtree.radiusSearch(searchPoint, radius, pointIdxRadiusSearch, pointRadiusSquaredDistance) > 0)
-	{
-		for (size_t i = 0; i < pointIdxRadiusSearch.size(); ++i)
-		{
-			cout << "    " << cloud->points[pointIdxRadiusSearch[i]].x
-				<< " " << cloud->points[pointIdxRadiusSearch[i]].x
-				<< " " << cloud->points[pointIdxRadiusSearch[i]].z
-				<< "( squared distance: " << pointRadiusSquaredDistance[i] << " )" << endl;
-			// ²éÑ¯µãÁÚÓòÄÚµÄµã×ÅÉ«
-			cloud->points[pointIdxRadiusSearch[i]].r = 255;
-			cloud->points[pointIdxRadiusSearch[i]].g = 0;
-			cloud->points[pointIdxRadiusSearch[i]].b = 255;
-		}
-	}
+    // åˆ›å»ºåŠå¾„æœç´¢ç‚¹ç‚¹äº‘
+    pcl::PointCloud<pcl::PointXYZ>::Ptr radius_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    for (size_t i = 0; i < point_idx_radius_search.size(); ++i)
+    {
+        radius_cloud->push_back(cloud->points[point_idx_radius_search[i]]);
+    }
+    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> radius_blue(radius_cloud, 0, 100, 255);
+    viewer->addPointCloud<pcl::PointXYZ>(radius_cloud, radius_blue, "radius_points");
+    viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 6, "radius_points");
 
-	// ¿ÉÊÓ»¯
-	pcl::visualization::PCLVisualizer viewer("PCL Viewer");
-	viewer.setBackgroundColor(0.0, 0.0, 0.0);
-	viewer.addPointCloud<pcl::PointXYZRGB>(cloud, "cloud");
-	viewer.setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "cloud");
+    // æ·»åŠ ä»æŸ¥è¯¢ç‚¹åˆ°æ¯ä¸ªKNNç‚¹çš„è¿çº¿
+    for (size_t i = 0; i < point_idx_knn_search.size(); ++i)
+    {
+        pcl::PointXYZ neighbor_point = cloud->points[point_idx_knn_search[i]];
+        std::string line_id = "knn_line_" + std::to_string(i);
+        viewer->addLine<pcl::PointXYZ, pcl::PointXYZ>(searchPoint, neighbor_point, 255, 255, 0, line_id);
+        viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_LINE_WIDTH, 2, line_id);
+    }
 
-	while (!viewer.wasStopped()) {
-		viewer.spinOnce();
-		std::this_thread::sleep_for(std::chrono::microseconds(100));
-	}
+    // æ·»åŠ æœç´¢åŠå¾„çƒä½“
+    viewer->addSphere(searchPoint, radius, 0.3, 0.3, 0.8, "radius_sphere");
+    viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_OPACITY, 0.2, "radius_sphere");
+    viewer->setShapeRenderingProperties(pcl::visualization::PCL_VISUALIZER_REPRESENTATION,
+                                        pcl::visualization::PCL_VISUALIZER_REPRESENTATION_WIREFRAME, "radius_sphere");
 
-	return 0;
+    // æ·»åŠ å›¾ä¾‹æ–‡æœ¬
+    viewer->addText("KD-Tree Search Visualization", 10, 110, 20, 1, 1, 1, "title");
+    viewer->addText("Gray: Original point cloud (1000 points)", 10, 90, 14, 0.8, 0.8, 0.8, "original_text");
+    viewer->addText("Red: Search point", 10, 75, 14, 1, 0, 0, "search_text");
+    viewer->addText("Green: KNN neighbors (K=5)", 10, 60, 14, 0, 1, 0, "knn_text");
+    viewer->addText("Blue: Radius search points", 10, 45, 14, 0, 0.6, 1, "radius_text");
+    viewer->addText("Yellow: KNN connection lines", 10, 30, 14, 1, 1, 0, "lines_text");
+    viewer->addText("Transparent sphere: Search radius", 10, 15, 14, 0.3, 0.3, 0.8, "sphere_text");
+
+    // æ·»åŠ ç»Ÿè®¡ä¿¡æ¯
+    std::string stats_text = "Results: KNN=" + std::to_string(point_idx_knn_search.size()) +
+                             ", Radius=" + std::to_string(point_idx_radius_search.size());
+    viewer->addText(stats_text, 10, 130, 16, 1, 1, 1, "stats_text");
+
+    // æ·»åŠ åæ ‡è½´
+    viewer->addCoordinateSystem(200.0);
+
+    // è®¾ç½®ç›¸æœºä½ç½®ä»¥è·å¾—æ›´å¥½çš„è§†è§’
+    viewer->initCameraParameters();
+    viewer->setCameraPosition(0, 0, 2500, 0, 0, 0, 0, 1, 0);
+
+    std::cout << "\n=== Visualization Started ===" << std::endl;
+    std::cout << "Press 'q' in the window to exit" << std::endl;
+    std::cout << "Use mouse to rotate and scroll to zoom" << std::endl;
+    std::cout << "Press 'r' to reset camera view" << std::endl;
+
+    // ä¸»å¾ªç¯ - ä¿æŒå¯è§†åŒ–çª—å£æ‰“å¼€
+    while (!viewer->wasStopped())
+    {
+        viewer->spinOnce(100);
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    return 0;
 }

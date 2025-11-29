@@ -1,71 +1,137 @@
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
 #include <pcl/io/pcd_io.h>
 #include <pcl/ModelCoefficients.h>
 #include <pcl/filters/project_inliers.h>
-#include <pcl/visualization/cloud_viewer.h>
-
-using namespace std;
+#include <pcl/visualization/pcl_visualizer.h>
+#include <iostream>
+#include <thread>
+#include <chrono>
 
 int main()
 {
-	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);					//Ô­Ê¼µãÔÆ
-	pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_projected(new pcl::PointCloud<pcl::PointXYZ>);		//Í¶Ó°µãÔÆ
+    // åˆ›å»ºç‚¹äº‘æŒ‡é’ˆ
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);           // åŸå§‹ç‚¹äº‘
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_projected(new pcl::PointCloud<pcl::PointXYZ>); // æŠ•å½±ç‚¹äº‘
 
-	// ¶ÁÈëµãÔÆÊı¾İ
-	cout << "->ÕıÔÚ¶ÁÈëµãÔÆ..." << endl;
-	pcl::PCDReader reader;
-	reader.read("test.pcd", *cloud);
-	cout << "\t\t<¶ÁÈëµãÔÆĞÅÏ¢>\n" << *cloud << endl;
+    // è¯»å–ç‚¹äº‘æ•°æ®
+    std::cout << "=== Loading Point Cloud ===" << std::endl;
+    if (pcl::io::loadPCDFile<pcl::PointXYZ>("test.pcd", *cloud) == -1)
+    {
+        PCL_ERROR("Could not read point cloud file!\n");
+        return -1;
+    }
+    std::cout << "Original point cloud: " << cloud->width * cloud->height
+              << " points" << std::endl;
 
-	// ²ÎÊı»¯Ä£ĞÍÍ¶Ó°
-	cout << "->ÕıÔÚÆ½ÃæÄ£ĞÍÍ¶Ó°..." << endl;
-	// ´´½¨Æ½Ãæ
-	pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients());
-	coefficients->values.resize(4);	//ÉèÖÃÄ£ĞÍÏµÊıµÄ´óĞ¡
-	coefficients->values[0] = 1.0;	//xÏµÊı
-	coefficients->values[1] = 1.0;	//yÏµÊı
-	coefficients->values[2] = 1.0;	//zÏµÊı
-	coefficients->values[3] = 0.0;	//³£ÊıÏî
+    // å‚æ•°åŒ–æ¨¡å‹æŠ•å½±
+    std::cout << "\n=== Performing Plane Projection ===" << std::endl;
 
-	// Í¶Ó°ÂË²¨
-	pcl::ProjectInliers<pcl::PointXYZ> proj;//´´½¨Í¶Ó°ÂË²¨Æ÷¶ÔÏó
-	proj.setModelType(pcl::SACMODEL_PLANE);	//ÉèÖÃ¶ÔÏó¶ÔÓ¦µÄÍ¶Ó°Ä£ĞÍ
-	proj.setInputCloud(cloud);				//ÉèÖÃÊäÈëµãÔÆ
-	proj.setModelCoefficients(coefficients);//ÉèÖÃÄ£ĞÍ¶ÔÓ¦µÄÏµÊı
-	proj.filter(*cloud_projected);			//Ö´ĞĞÍ¶Ó°ÂË²¨£¬´æ´¢½á¹ûÓÚcloud_projected
+    // åˆ›å»ºå¹³é¢æ¨¡å‹ç³»æ•°
+    // å¹³é¢æ–¹ç¨‹: ax + by + cz + d = 0 => x + y + z = 0
+    pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients());
+    coefficients->values.resize(4);
+    coefficients->values[0] = 1.0; // x ç³»æ•° (a)
+    coefficients->values[1] = 1.0; // y ç³»æ•° (b)
+    coefficients->values[2] = 1.0; // z ç³»æ•° (c)
+    coefficients->values[3] = 0.0; // å¸¸æ•°é¡¹ (d)
 
-	// ±£´æÂË²¨µãÔÆ
-	cout << "->ÕıÔÚ±£´æÍ¶Ó°µãÔÆ..." << endl;
-	pcl::PCDWriter writer;
-	writer.write("proj_PLANE.pcd", *cloud_projected, true);
-	cout << "\t\t<±£´æµãÔÆĞÅÏ¢>\n" << *cloud_projected << endl;
+    std::cout << "Plane coefficients: "
+              << coefficients->values[0] << "x + "
+              << coefficients->values[1] << "y + "
+              << coefficients->values[2] << "z + "
+              << coefficients->values[3] << " = 0" << std::endl;
 
-	// ¿ÉÊÓ»¯
-	pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer("ÂË²¨Ç°ºó¶Ô±È"));
+    // åˆ›å»ºæŠ•å½±æ»¤æ³¢å™¨
+    pcl::ProjectInliers<pcl::PointXYZ> proj;
+    proj.setModelType(pcl::SACMODEL_PLANE);  // è®¾ç½®æŠ•å½±æ¨¡å‹ä¸ºå¹³é¢
+    proj.setInputCloud(cloud);               // è®¾ç½®è¾“å…¥ç‚¹äº‘
+    proj.setModelCoefficients(coefficients); // è®¾ç½®æ¨¡å‹ç³»æ•°
+    proj.filter(*cloud_projected);           // æ‰§è¡ŒæŠ•å½±æ»¤æ³¢
 
-	// ÊÓÍ¼1
-	int v1(0);
-	viewer->createViewPort(0.0, 0.0, 0.5, 1.0, v1); //ÉèÖÃµÚÒ»¸öÊÓ¿ÚÔÚXÖá¡¢YÖáµÄ×îĞ¡Öµ¡¢×î´óÖµ£¬È¡ÖµÔÚ0-1Ö®¼ä
-	viewer->setBackgroundColor(0, 0, 0, v1); //ÉèÖÃ±³¾°ÑÕÉ«£¬0-1£¬Ä¬ÈÏºÚÉ«£¨0£¬0£¬0£©
-	viewer->addText("befor_filtered", 10, 10, "v1_text", v1);
-	viewer->addPointCloud<pcl::PointXYZ>(cloud, "befor_filtered_cloud", v1);
+    std::cout << "Projected point cloud: " << cloud_projected->width * cloud_projected->height
+              << " points" << std::endl;
 
-	// ÊÓÍ¼2
-	int v2(0);
-	viewer->createViewPort(0.5, 0.0, 1.0, 1.0, v2);
-	viewer->setBackgroundColor(0.3, 0.3, 0.3, v2);
-	viewer->addText("after_filtered", 10, 10, "v2_text", v2);
-	viewer->addPointCloud<pcl::PointXYZ>(cloud_projected, "after_filtered_cloud", v2);
+    // ä¿å­˜æŠ•å½±ç‚¹äº‘
+    std::cout << "\n=== Saving Projected Point Cloud ===" << std::endl;
 
-	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "befor_filtered_cloud", v1);
-	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 1, 0, 0, "befor_filtered_cloud", v1);
+    if (cloud_projected->empty())
+    {
+        PCL_ERROR("Projected point cloud is empty!\n");
+        return -1;
+    }
+    else
+    {
+        pcl::io::savePCDFileASCII("filtered.pcd", *cloud_projected);
+        std::cout << "Projected point cloud saved to 'filtered.pcd'" << std::endl;
+    }
 
-	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "after_filtered_cloud", v2);
-	viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0, 1, 0, "after_filtered_cloud", v2);
+    // å¯è§†åŒ–
 
-	while (!viewer->wasStopped())
-	{
-		viewer->spinOnce(100);
-	}
-	return 0;
+    // åˆ›å»ºå¯è§†åŒ–å™¨
+    pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer("Plane Projection Comparison"));
+    viewer->setBackgroundColor(0.05, 0.05, 0.15); // æ·±è“è‰²èƒŒæ™¯
+
+    // å·¦ä¾§è§†å£ - åŸå§‹ç‚¹äº‘
+    int v1(0);
+    viewer->createViewPort(0.0, 0.0, 0.5, 1.0, v1);
+    viewer->setBackgroundColor(0.1, 0.1, 0.2, v1);
+
+    // æ·»åŠ åŸå§‹ç‚¹äº‘
+    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> cloud_red(cloud, 255, 0, 0);
+    viewer->addPointCloud<pcl::PointXYZ>(cloud, cloud_red, "original_cloud", v1);
+    viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "original_cloud", v1);
+
+    // æ·»åŠ æ–‡æœ¬è¯´æ˜
+    viewer->addText("Original Point Cloud", 10, 20, 16, 1, 1, 1, "original_text", v1);
+    std::string original_count = "Points: " + std::to_string(cloud->size());
+    viewer->addText(original_count, 10, 40, 14, 1, 1, 1, "original_count", v1);
+
+    // å³ä¾§è§†å£ - æŠ•å½±ç‚¹äº‘
+    int v2(0);
+    viewer->createViewPort(0.5, 0.0, 1.0, 1.0, v2);
+    viewer->setBackgroundColor(0.1, 0.2, 0.1, v2);
+
+    // æ·»åŠ æŠ•å½±ç‚¹äº‘
+    pcl::visualization::PointCloudColorHandlerCustom<pcl::PointXYZ> projected_green(cloud_projected, 0, 255, 0);
+    viewer->addPointCloud<pcl::PointXYZ>(cloud_projected, projected_green, "projected_cloud", v2);
+    viewer->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 3, "projected_cloud", v2);
+
+    // æ·»åŠ æ–‡æœ¬è¯´æ˜
+    viewer->addText("Projected Point Cloud", 10, 20, 16, 1, 1, 1, "projected_text", v2);
+    std::string projected_count = "Points: " + std::to_string(cloud_projected->size());
+    viewer->addText(projected_count, 10, 40, 14, 1, 1, 1, "projected_count", v2);
+
+    // æ·»åŠ æŠ•å½±å¹³é¢ä¿¡æ¯
+    std::string plane_info = "Projection Plane: x + y + z = 0";
+    viewer->addText(plane_info, 10, 60, 14, 1, 1, 1, "plane_info", v2);
+
+    // å…¬å…±è®¾ç½®
+
+    // æ·»åŠ æ ‡é¢˜
+    viewer->addText("Plane Projection Filter", 300, 20, 18, 1, 1, 1, "title");
+
+    // æ·»åŠ åæ ‡è½´
+    viewer->addCoordinateSystem(1.0, "axis_v1", v1);
+    viewer->addCoordinateSystem(1.0, "axis_v2", v2);
+
+    // è®¾ç½®ç›¸æœºå‚æ•°
+    viewer->initCameraParameters();
+    viewer->setCameraPosition(0, 0, 5, 0, 0, 0, 0, 1, 0);
+
+    std::cout << "\n=== Visualization Started ===" << std::endl;
+    std::cout << "Left: Original point cloud (Red)" << std::endl;
+    std::cout << "Right: Projected point cloud (Green)" << std::endl;
+    std::cout << "Projection plane: x + y + z = 0" << std::endl;
+    std::cout << "Press 'q' to exit" << std::endl;
+    std::cout << "Use mouse to rotate and scroll to zoom" << std::endl;
+
+    // ä¸»å¾ªç¯
+    while (!viewer->wasStopped())
+    {
+        viewer->spinOnce(100);
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    return 0;
 }
-
